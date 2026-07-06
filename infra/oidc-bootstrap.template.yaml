@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  One-time bootstrap for Ottertest CI/CD. Creates a GitHub OIDC identity
+  provider (optional) and an IAM role that GitHub Actions can assume — with no
+  long-lived access keys — to deploy the Ottertest CDK stack.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Default: bhargav465
+    Description: GitHub user/org that owns the repository.
+  RepoName:
+    Type: String
+    Default: Ottertest
+    Description: Repository name.
+  CreateOIDCProvider:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "true"
+    Description: >
+      Set to "false" if the GitHub Actions OIDC provider
+      (token.actions.githubusercontent.com) already exists in this account.
+
+Conditions:
+  ShouldCreateProvider: !Equals [!Ref CreateOIDCProvider, "true"]
+
+Resources:
+  GitHubOIDCProvider:
+    Condition: ShouldCreateProvider
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ottertest-github-deploy
+      Description: Assumed by GitHub Actions to deploy the Ottertest stack.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - ShouldCreateProvider
+                - !Ref GitHubOIDCProvider
+                - !Sub arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                # Restrict to this repo (any branch/tag/PR).
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOrg}/${RepoName}:*
+      # AdministratorAccess keeps the one-time setup simple. CDK bootstrap +
+      # deploy touch many services (CloudFormation, S3, IAM, Lambda, DynamoDB,
+      # Cognito, API Gateway, EventBridge, ECR, SSM, Logs). You can swap this for
+      # a tighter custom policy later — see docs/AWS_OIDC_SETUP.md.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+Outputs:
+  DeployRoleArn:
+    Description: Paste this as the AWS_DEPLOY_ROLE_ARN repository variable in GitHub.
+    Value: !GetAtt DeployRole.Arn

@@ -1,0 +1,110 @@
+name: Deploy to AWS
+
+# Manual, on-demand deploy. Run it from the GitHub "Actions" tab →
+# "Deploy to AWS" → "Run workflow". Requires the repository variable
+# AWS_DEPLOY_ROLE_ARN (see docs/AWS_OIDC_SETUP.md).
+on:
+  workflow_dispatch:
+    inputs:
+      aws_region:
+        description: AWS region to deploy to
+        required: true
+        default: us-east-1
+      bedrock_enabled:
+        description: "Enable Amazon Bedrock AI summaries (needs Bedrock model access)"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write # required to request the OIDC token
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy Ottertest stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify deploy role is configured
+        run: |
+          if [ -z "${{ vars.AWS_DEPLOY_ROLE_ARN }}" ]; then
+            echo "::error::Repository variable AWS_DEPLOY_ROLE_ARN is not set."
+            echo "::error::Follow docs/AWS_OIDC_SETUP.md to create the role, then add the variable."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: ottertest-deploy
+
+      - name: Install infra dependencies
+        working-directory: infra
+        run: npm ci
+
+      - name: Bootstrap CDK (idempotent)
+        working-directory: infra
+        env:
+          BEDROCK_ENABLED: ${{ inputs.bedrock_enabled }}
+        run: npx cdk bootstrap
+
+      - name: Deploy stack
+        working-directory: infra
+        env:
+          BEDROCK_ENABLED: ${{ inputs.bedrock_enabled }}
+        run: npx cdk deploy --require-approval never --outputs-file cdk-outputs.json
+
+      - name: Publish outputs to job summary
+        id: out
+        working-directory: infra
+        run: |
+          echo "api=$(jq -r '.OttertestStack.ApiUrl' cdk-outputs.json)" >> "$GITHUB_OUTPUT"
+          {
+            echo "## 🦦 Ottertest deployed"
+            echo ""
+            echo "Bedrock summaries: **${{ inputs.bedrock_enabled }}**"
+            echo ""
+            echo "| Output | Value |"
+            echo "|--------|-------|"
+            jq -r '.OttertestStack | to_entries[] | "| \(.key) | `\(.value)` |"' cdk-outputs.json
+            echo ""
+            echo "Paste these into \`frontend/.env\` to run the web app."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke test API (expect 401 without auth)
+        run: |
+          API="${{ steps.out.outputs.api }}"
+          echo "Checking $API/meetings ..."
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$API/meetings")
+          echo "HTTP $code"
+          if [ "$code" = "401" ] || [ "$code" = "403" ]; then
+            echo "✅ API is live and rejects unauthenticated requests as expected."
+          else
+            echo "::warning::Got HTTP $code (expected 401/403). The stack deployed, but double-check the API."
+          fi
+
+      - name: Build frontend bundle
+        working-directory: frontend
+        run: |
+          {
+            echo "VITE_AWS_REGION=${{ inputs.aws_region }}"
+            echo "VITE_API_URL=$(jq -r '.OttertestStack.ApiUrl' ../infra/cdk-outputs.json)"
+            echo "VITE_USER_POOL_ID=$(jq -r '.OttertestStack.UserPoolId' ../infra/cdk-outputs.json)"
+            echo "VITE_USER_POOL_CLIENT_ID=$(jq -r '.OttertestStack.UserPoolClientId' ../infra/cdk-outputs.json)"
+          } > .env
+          npm ci
+          npm run build
+
+      - name: Upload frontend bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 14

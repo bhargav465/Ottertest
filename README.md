@@ -94,6 +94,16 @@ npm run dev               # http://localhost:5173
 Full walkthrough (including production hosting on S3 + CloudFront) is in
 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
+### Or deploy straight from GitHub (no local AWS setup)
+
+Prefer not to run anything locally? Ottertest ships a **GitHub Actions deploy
+workflow** that provisions the stack via **AWS OIDC** — no long-lived keys stored
+anywhere. You create one IAM role from the included CloudFormation template, add
+its ARN as a repo variable, then click **Actions → Deploy to AWS → Run
+workflow**. The run deploys the stack, smoke-tests the live API, prints the
+outputs, and attaches a built frontend bundle. Step-by-step:
+[`docs/AWS_OIDC_SETUP.md`](docs/AWS_OIDC_SETUP.md).
+
 ---
 
 ## Repository layout
