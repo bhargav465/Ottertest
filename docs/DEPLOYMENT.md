@@ -92,24 +92,35 @@ Sign up with your email, confirm the code Cognito emails you, and record your
 first meeting. Recording requires **HTTPS or localhost** (browser mic policy) —
 `localhost` is fine for dev.
 
-## 4. (Optional) Host the frontend on AWS
+## 4. Host the frontend on AWS
 
-Build the static site and serve it from S3 + CloudFront:
+The CDK stack already provisions the hosting infrastructure: a **private S3
+bucket behind a CloudFront distribution** (HTTPS + CDN). `npm run deploy` prints
+`SiteBucketName`, `DistributionId`, and `SiteUrl`. You just need to build the
+site and upload it:
 
 ```bash
 cd frontend
-npm run build      # outputs to frontend/dist/
+# .env must contain the CDK outputs (as in step 3)
+npm run build                        # → frontend/dist/
+
+# Upload and cache-bust (uses your AWS CLI credentials):
+aws s3 sync dist "s3://<SiteBucketName>" --delete \
+  --exclude index.html --cache-control "public,max-age=31536000,immutable"
+aws s3 cp dist/index.html "s3://<SiteBucketName>/index.html" --cache-control "no-cache"
+aws cloudfront create-invalidation --distribution-id <DistributionId> --paths "/*"
 ```
 
-Then either:
+Then open the **`SiteUrl`**. (First deploy: CloudFront takes a few minutes to
+propagate.)
 
-- **Quick:** create an S3 bucket with static website hosting and upload `dist/`,
-  fronted by CloudFront for HTTPS; or
-- **Extend the CDK:** add an `aws-s3-deployment` + CloudFront distribution to
-  `infra/lib/ottertest-stack.ts` so the frontend deploys alongside the backend.
+> **Prefer zero local steps?** The **GitHub Actions deploy workflow does all of
+> the above automatically** — deploy backend, build the site, publish to
+> CloudFront, and print the live URL. See
+> [`AWS_OIDC_SETUP.md`](AWS_OIDC_SETUP.md).
 
-After hosting, tighten the two `allowOrigins: ["*"]` values in the stack (S3 CORS
-and API Gateway CORS) to your real frontend origin, and redeploy.
+For a locked-down setup, tighten the two `allowOrigins: ["*"]` values in the
+stack (S3 CORS and API Gateway CORS) to your `SiteUrl`, and redeploy.
 
 ## 5. Tearing it down
 

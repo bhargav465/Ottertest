@@ -102,6 +102,32 @@ jobs:
           npm ci
           npm run build
 
+      - name: Publish site to S3 + CloudFront
+        working-directory: infra
+        run: |
+          SITE_BUCKET=$(jq -r '.OttertestStack.SiteBucketName' cdk-outputs.json)
+          DIST_ID=$(jq -r '.OttertestStack.DistributionId' cdk-outputs.json)
+          echo "Syncing to s3://$SITE_BUCKET ..."
+          # Long-cache the fingerprinted assets, but always revalidate index.html.
+          aws s3 sync ../frontend/dist "s3://$SITE_BUCKET" --delete \
+            --exclude index.html --cache-control "public,max-age=31536000,immutable"
+          aws s3 cp ../frontend/dist/index.html "s3://$SITE_BUCKET/index.html" \
+            --cache-control "no-cache"
+          echo "Invalidating CloudFront $DIST_ID ..."
+          aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*" >/dev/null
+          echo "SITE_URL=$(jq -r '.OttertestStack.SiteUrl' cdk-outputs.json)" >> "$GITHUB_ENV"
+
+      - name: Announce site URL
+        run: |
+          {
+            echo "### 🌐 Web app is live"
+            echo ""
+            echo "**$SITE_URL**"
+            echo ""
+            echo "Sign up with your email to start recording. (CloudFront can take"
+            echo "a few minutes to finish propagating on the very first deploy.)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload frontend bundle
         uses: actions/upload-artifact@v4
         with:

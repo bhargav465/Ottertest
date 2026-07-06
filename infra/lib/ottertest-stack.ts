@@ -12,6 +12,8 @@ import * as apigwInt from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
+import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
+import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as path from "path";
 
 /**
@@ -293,6 +295,46 @@ export class OttertestStack extends cdk.Stack {
     addRoute(apigw.HttpMethod.DELETE, "/meetings/{meetingId}", deleteMeetingFn);
 
     // ---------------------------------------------------------------------
+    // Frontend hosting: private S3 bucket behind CloudFront (HTTPS + CDN).
+    // The deploy workflow builds the site and syncs it into SiteBucket.
+    // ---------------------------------------------------------------------
+    const siteBucket = new s3.Bucket(this, "SiteBucket", {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      // Site content is a regenerable build artifact — safe to drop on teardown.
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
+
+    const distribution = new cloudfront.Distribution(this, "SiteDistribution", {
+      comment: "Ottertest web app",
+      defaultRootObject: "index.html",
+      defaultBehavior: {
+        // Origin Access Control keeps the bucket private; only CloudFront reads it.
+        origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
+        viewerProtocolPolicy:
+          cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+      },
+      // Single-page app: route client-side paths back to index.html.
+      errorResponses: [
+        {
+          httpStatus: 403,
+          responseHttpStatus: 200,
+          responsePagePath: "/index.html",
+          ttl: cdk.Duration.seconds(10),
+        },
+        {
+          httpStatus: 404,
+          responseHttpStatus: 200,
+          responsePagePath: "/index.html",
+          ttl: cdk.Duration.seconds(10),
+        },
+      ],
+    });
+
+    // ---------------------------------------------------------------------
     // Outputs (paste these into frontend/.env)
     // ---------------------------------------------------------------------
     new cdk.CfnOutput(this, "ApiUrl", { value: httpApi.apiEndpoint });
@@ -306,6 +348,15 @@ export class OttertestStack extends cdk.Stack {
     });
     new cdk.CfnOutput(this, "BedrockModelId", {
       value: DEFAULT_BEDROCK_MODEL_ID,
+    });
+    new cdk.CfnOutput(this, "SiteBucketName", {
+      value: siteBucket.bucketName,
+    });
+    new cdk.CfnOutput(this, "DistributionId", {
+      value: distribution.distributionId,
+    });
+    new cdk.CfnOutput(this, "SiteUrl", {
+      value: `https://${distribution.distributionDomainName}`,
     });
   }
 }

@@ -71,15 +71,18 @@ tab → New repository variable**:
 The workflow will:
 
 - assume the role via OIDC (no keys),
-- `cdk bootstrap` (idempotent) and `cdk deploy`,
+- `cdk bootstrap` (idempotent) and `cdk deploy` (backend **and** an S3 +
+  CloudFront site),
 - **smoke-test the live API** (expects `401` for an unauthenticated request),
-- print all stack outputs (`ApiUrl`, `UserPoolId`, …) to the run's **Summary**,
-- build the frontend and attach `frontend-dist` as a downloadable artifact.
+- build the frontend with the right config and **publish it to CloudFront**,
+- print all stack outputs (`ApiUrl`, `UserPoolId`, `SiteUrl`, …) to the run's
+  **Summary**, including the **live web app URL**,
+- attach `frontend-dist` as a downloadable artifact.
 
-Copy the outputs from the run summary into `frontend/.env` (see
-[`../frontend/.env.example`](../frontend/.env.example)) to run or host the web
-app. To enable summaries later, just re-run with **Bedrock** checked (after
-enabling model access in the Bedrock console).
+When it's done, open the **`SiteUrl`** from the run summary — that's your live
+app. (First deploy: CloudFront may take a few minutes to propagate.) To enable AI
+summaries later, just re-run with **Bedrock** checked (after enabling model
+access in the Bedrock console).
 
 ---
 

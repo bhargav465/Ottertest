@@ -79,7 +79,8 @@ npm install
 npm run bootstrap        # one-time per account/region
 npm run deploy           # provisions the S3 storage bucket, DynamoDB, Lambda, Cognito, API Gateway
 
-# The deploy prints outputs: ApiUrl, UserPoolId, UserPoolClientId, Region, MediaBucketName
+# The deploy prints outputs: ApiUrl, UserPoolId, UserPoolClientId, Region, MediaBucketName,
+#                            SiteBucketName, DistributionId, SiteUrl (CloudFront web app)
 
 # Later, to enable AI summaries + action items (needs Bedrock model access):
 #   BEDROCK_ENABLED=true npm run deploy
@@ -100,8 +101,9 @@ Prefer not to run anything locally? Ottertest ships a **GitHub Actions deploy
 workflow** that provisions the stack via **AWS OIDC** — no long-lived keys stored
 anywhere. You create one IAM role from the included CloudFormation template, add
 its ARN as a repo variable, then click **Actions → Deploy to AWS → Run
-workflow**. The run deploys the stack, smoke-tests the live API, prints the
-outputs, and attaches a built frontend bundle. Step-by-step:
+workflow**. The run deploys the backend **and** the frontend (S3 + CloudFront),
+smoke-tests the live API, and prints your **live app URL** in the run summary —
+no local tooling required. Step-by-step:
 [`docs/AWS_OIDC_SETUP.md`](docs/AWS_OIDC_SETUP.md).
 
 ---
