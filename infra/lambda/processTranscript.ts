@@ -4,6 +4,8 @@ import { findMeetingById, updateMeeting } from "./shared/dynamo";
 import { summarizeTranscript, generateTitle } from "./shared/bedrock";
 
 const BUCKET = process.env.MEDIA_BUCKET!;
+// AI summarization is optional — see BEDROCK_ENABLED in the CDK stack.
+const BEDROCK_ENABLED = process.env.BEDROCK_ENABLED === "true";
 const s3 = new S3Client({});
 
 interface TranscribeJobDetail {
@@ -89,11 +91,6 @@ export async function handler(
   }
 
   try {
-    await updateMeeting(userId, meetingId, {
-      status: "SUMMARIZING",
-      updatedAt: new Date().toISOString(),
-    });
-
     // Read the transcript JSON we told Transcribe to write.
     const transcriptKey =
       meeting.transcriptKey ?? `transcripts/${meetingId}.json`;
@@ -112,6 +109,22 @@ export async function handler(
       });
       return;
     }
+
+    // Bedrock disabled: store the transcript and finish. No summary yet.
+    if (!BEDROCK_ENABLED) {
+      await updateMeeting(userId, meetingId, {
+        status: "DONE",
+        transcript,
+        updatedAt: new Date().toISOString(),
+      });
+      console.log(`Transcribed meeting ${meetingId} (summarization disabled)`);
+      return;
+    }
+
+    await updateMeeting(userId, meetingId, {
+      status: "SUMMARIZING",
+      updatedAt: new Date().toISOString(),
+    });
 
     const [summary, autoTitle] = await Promise.all([
       summarizeTranscript(transcript, meeting.ownerEmail),

@@ -9,7 +9,7 @@ This guide walks you from an empty AWS account to a working Ottertest instance.
 | AWS account | You'll deploy into your own account, so all data stays with you. |
 | AWS CLI | Installed and configured (`aws configure`) with credentials that can create IAM roles, S3, DynamoDB, Lambda, Cognito, API Gateway, and EventBridge resources. |
 | Node.js 20+ | For both the CDK app and the frontend. |
-| Bedrock model access | In the AWS console → **Bedrock → Model access**, enable a Claude model in your target region (e.g. *Claude 3.5 Sonnet*). Without this, summaries will fail. |
+| Bedrock model access | **Optional.** Only needed if you enable AI summaries (`BEDROCK_ENABLED=true`). In the AWS console → **Bedrock → Model access**, enable a Claude model in your target region (e.g. *Claude 3.5 Sonnet*). |
 
 > **Region choice.** Deploy in a region where **both** Amazon Transcribe and your
 > chosen Bedrock model are available — e.g. `us-east-1`, `us-west-2`, or
@@ -39,13 +39,27 @@ OttertestStack.MediaBucket       = otterteststack-mediabucketXXXX
 OttertestStack.BedrockModelId    = anthropic.claude-3-5-sonnet-20240620-v1:0
 ```
 
-### Choosing / overriding the Bedrock model
+### Enabling AI summaries (optional)
+
+Summaries and action items are **off by default** — the app records to S3 and
+transcribes without needing Bedrock. When you're ready, enable Bedrock model
+access (see prerequisites) and redeploy with the flag on:
+
+```bash
+BEDROCK_ENABLED=true npm run deploy
+```
+
+New meetings recorded after this will get an AI summary and action items.
+(Existing meetings keep whatever they had; re-record or re-run the pipeline to
+backfill.)
+
+#### Choosing / overriding the Bedrock model
 
 Some models are only reachable through a **cross-region inference profile**. If
 `InvokeModel` fails with an on-demand throughput error, deploy with a profile ID:
 
 ```bash
-BEDROCK_MODEL_ID="us.anthropic.claude-3-5-sonnet-20241022-v2:0" npm run deploy
+BEDROCK_ENABLED=true BEDROCK_MODEL_ID="us.anthropic.claude-3-5-sonnet-20241022-v2:0" npm run deploy
 ```
 
 (The `us.` prefix denotes a US inference profile. Pick the one that matches your

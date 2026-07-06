@@ -4,11 +4,16 @@ An open-source, self-hosted alternative to [Otter.ai](https://otter.ai) that run
 entirely in **your own AWS account**. Record a meeting in your browser, and
 Ottertest automatically:
 
-1. **Stores** the audio securely in S3
+1. **Stores** the audio securely in an S3 storage bucket
 2. **Transcribes** it with Amazon Transcribe (speaker-labelled)
-3. **Summarizes** it with Amazon Bedrock (Claude) — TL;DR, key points, and
-   decisions
-4. **Extracts action items**, highlighting the ones assigned **to you**
+3. *(optional)* **Summarizes** it with Amazon Bedrock (Claude) — TL;DR, key
+   points, and decisions
+4. *(optional)* **Extracts action items**, highlighting the ones assigned **to you**
+
+> **AI summaries are optional and OFF by default.** Out of the box the app
+> records to S3 and transcribes with Amazon Transcribe — no Bedrock access
+> required. Flip on summaries whenever you're ready with
+> `BEDROCK_ENABLED=true npm run deploy` (see below).
 
 Everything — code, infrastructure, and data — lives in your GitHub repo and your
 AWS account. No third-party SaaS.
@@ -39,7 +44,8 @@ AWS account. No third-party SaaS.
 |------|---------|---------|--------|
 | 1. Upload | User clicks *Stop* | Browser → S3 (presigned PUT) | `audio/{userId}/{meetingId}.webm` |
 | 2. Transcribe | S3 `ObjectCreated` | `startTranscription` Lambda → Amazon Transcribe | `transcripts/{meetingId}.json` |
-| 3. Summarize | Transcribe job `COMPLETED` (EventBridge) | `processTranscript` Lambda → Amazon Bedrock | summary + action items in DynamoDB |
+| 3. Store transcript | Transcribe job `COMPLETED` (EventBridge) | `processTranscript` Lambda | transcript saved to DynamoDB |
+| 3b. Summarize *(optional)* | same, when `BEDROCK_ENABLED=true` | `processTranscript` Lambda → Amazon Bedrock | summary + action items in DynamoDB |
 | 4. Read | User opens app | React → HTTP API → DynamoDB | rendered meeting page |
 
 ---
@@ -49,10 +55,10 @@ AWS account. No third-party SaaS.
 | Concern | Choice | Where to change |
 |---------|--------|-----------------|
 | Infrastructure | **AWS CDK** (TypeScript) | `infra/lib/ottertest-stack.ts` |
+| Audio + transcript storage | **S3** (private, encrypted, versioned) | `infra/lib/ottertest-stack.ts` |
 | Speech-to-text | **Amazon Transcribe** | `infra/lambda/startTranscription.ts` |
-| Summaries / actions | **Amazon Bedrock (Claude)** | `BEDROCK_MODEL_ID` env var / `infra/lambda/shared/bedrock.ts` |
+| Summaries / actions | **Amazon Bedrock (Claude)** — *optional, off by default* | `BEDROCK_ENABLED` / `BEDROCK_MODEL_ID` env vars |
 | Auth | **Amazon Cognito** | `infra/lib/ottertest-stack.ts` |
-| Audio storage | **S3** | `infra/lib/ottertest-stack.ts` |
 | Metadata | **DynamoDB** | `infra/lib/ottertest-stack.ts` |
 | Frontend | **React + Vite** | `frontend/` |
 
@@ -63,18 +69,20 @@ These defaults keep 100% of your data inside your AWS account. See
 
 ## Quick start
 
-> Prerequisites: an AWS account, AWS CLI configured (`aws configure`), Node.js 20+,
-> and **Amazon Bedrock model access enabled for Claude** in your region
-> (Bedrock console → *Model access*).
+> Prerequisites: an AWS account, AWS CLI configured (`aws configure`), and
+> Node.js 20+. **No Bedrock access needed** unless you turn on AI summaries.
 
 ```bash
 # 1. Deploy the backend + infrastructure
 cd infra
 npm install
 npm run bootstrap        # one-time per account/region
-npm run deploy           # provisions S3, DynamoDB, Lambda, Cognito, API Gateway
+npm run deploy           # provisions the S3 storage bucket, DynamoDB, Lambda, Cognito, API Gateway
 
-# The deploy prints outputs: ApiUrl, UserPoolId, UserPoolClientId, Region, AudioBucket
+# The deploy prints outputs: ApiUrl, UserPoolId, UserPoolClientId, Region, MediaBucketName
+
+# Later, to enable AI summaries + action items (needs Bedrock model access):
+#   BEDROCK_ENABLED=true npm run deploy
 
 # 2. Configure and run the frontend
 cd ../frontend

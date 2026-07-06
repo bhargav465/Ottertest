@@ -15,9 +15,18 @@ import * as targets from "aws-cdk-lib/aws-events-targets";
 import * as path from "path";
 
 /**
- * The default Bedrock model used to summarize meetings. Claude 3.5 Sonnet gives
- * a good balance of quality and cost. Override with the BEDROCK_MODEL_ID env var
- * at deploy time, e.g. an inference-profile ID for cross-region access.
+ * AI summarization with Amazon Bedrock is OPTIONAL and OFF by default.
+ * Enable it once you've turned on Bedrock model access in your account:
+ *   BEDROCK_ENABLED=true npm run deploy
+ * With it off, meetings are still recorded to S3 and transcribed with Amazon
+ * Transcribe — you just won't get the AI summary + action items yet.
+ */
+const BEDROCK_ENABLED = process.env.BEDROCK_ENABLED === "true";
+
+/**
+ * The Bedrock model used to summarize meetings (only used when BEDROCK_ENABLED).
+ * Claude 3.5 Sonnet balances quality and cost. Override with BEDROCK_MODEL_ID,
+ * e.g. an inference-profile ID for cross-region access.
  */
 const DEFAULT_BEDROCK_MODEL_ID =
   process.env.BEDROCK_MODEL_ID ??
@@ -28,9 +37,13 @@ export class OttertestStack extends cdk.Stack {
     super(scope, id, props);
 
     // ---------------------------------------------------------------------
-    // Storage: private, encrypted S3 bucket for audio + transcripts
+    // S3 storage bucket — the single source of truth for all media.
+    //   audio/{userId}/{meetingId}.{ext}   raw recordings
+    //   transcripts/{meetingId}.json       Amazon Transcribe output
+    // Private, encrypted, versioned, and RETAINed on stack teardown.
     // ---------------------------------------------------------------------
     const mediaBucket = new s3.Bucket(this, "MediaBucket", {
+      versioned: true,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       enforceSSL: true,
@@ -112,6 +125,7 @@ export class OttertestStack extends cdk.Stack {
       MEDIA_BUCKET: mediaBucket.bucketName,
       MEETINGS_TABLE: meetingsTable.tableName,
       MEETINGS_GSI: "byMeetingId",
+      BEDROCK_ENABLED: BEDROCK_ENABLED ? "true" : "false",
       BEDROCK_MODEL_ID: DEFAULT_BEDROCK_MODEL_ID,
     };
 
@@ -196,16 +210,19 @@ export class OttertestStack extends cdk.Stack {
       })
     );
 
-    // Amazon Bedrock (Claude). InvokeModel on foundation models + inference profiles.
-    processTranscriptFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ["bedrock:InvokeModel"],
-        resources: [
-          `arn:aws:bedrock:*::foundation-model/*`,
-          `arn:aws:bedrock:*:${this.account}:inference-profile/*`,
-        ],
-      })
-    );
+    // Amazon Bedrock (Claude) — only granted when summarization is enabled.
+    // InvokeModel on foundation models + inference profiles.
+    if (BEDROCK_ENABLED) {
+      processTranscriptFn.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ["bedrock:InvokeModel"],
+          resources: [
+            `arn:aws:bedrock:*::foundation-model/*`,
+            `arn:aws:bedrock:*:${this.account}:inference-profile/*`,
+          ],
+        })
+      );
+    }
 
     // ---------------------------------------------------------------------
     // Event wiring

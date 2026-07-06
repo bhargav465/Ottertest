@@ -114,6 +114,17 @@ export function MeetingDetail({
             </button>
           </div>
 
+          {tab === "summary" && !meeting.summary && (
+            <div className="alert info">
+              AI summary and action items are turned off for this instance. Your
+              recording is safely stored and transcribed — open the{" "}
+              <button className="btn link" onClick={() => setTab("transcript")}>
+                Transcript
+              </button>{" "}
+              tab to read it. Enable Amazon Bedrock to get automatic summaries.
+            </div>
+          )}
+
           {tab === "summary" && meeting.summary && (
             <div className="summary">
               <section>
