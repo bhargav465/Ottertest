@@ -1,0 +1,131 @@
+# Deploying Ottertest
+
+This guide walks you from an empty AWS account to a working Ottertest instance.
+
+## 1. Prerequisites
+
+| Requirement | Notes |
+|-------------|-------|
+| AWS account | You'll deploy into your own account, so all data stays with you. |
+| AWS CLI | Installed and configured (`aws configure`) with credentials that can create IAM roles, S3, DynamoDB, Lambda, Cognito, API Gateway, and EventBridge resources. |
+| Node.js 20+ | For both the CDK app and the frontend. |
+| Bedrock model access | In the AWS console → **Bedrock → Model access**, enable a Claude model in your target region (e.g. *Claude 3.5 Sonnet*). Without this, summaries will fail. |
+
+> **Region choice.** Deploy in a region where **both** Amazon Transcribe and your
+> chosen Bedrock model are available — e.g. `us-east-1`, `us-west-2`, or
+> `eu-west-1`. Set it with `export AWS_REGION=us-east-1` (or `CDK_DEFAULT_REGION`).
+
+## 2. Deploy the backend (AWS CDK)
+
+```bash
+cd infra
+npm install
+
+# One-time per account+region: prepares the CDK deployment bucket/roles.
+npm run bootstrap
+
+# Provision everything.
+npm run deploy
+```
+
+When it finishes, CDK prints the outputs you need:
+
+```
+OttertestStack.ApiUrl            = https://abc123.execute-api.us-east-1.amazonaws.com
+OttertestStack.UserPoolId        = us-east-1_ABC123
+OttertestStack.UserPoolClientId  = 1a2b3c4d5e6f7g8h9i0j
+OttertestStack.Region            = us-east-1
+OttertestStack.MediaBucket       = otterteststack-mediabucketXXXX
+OttertestStack.BedrockModelId    = anthropic.claude-3-5-sonnet-20240620-v1:0
+```
+
+### Choosing / overriding the Bedrock model
+
+Some models are only reachable through a **cross-region inference profile**. If
+`InvokeModel` fails with an on-demand throughput error, deploy with a profile ID:
+
+```bash
+BEDROCK_MODEL_ID="us.anthropic.claude-3-5-sonnet-20241022-v2:0" npm run deploy
+```
+
+(The `us.` prefix denotes a US inference profile. Pick the one that matches your
+region — `eu.`, `apac.`, etc.)
+
+## 3. Run the frontend
+
+```bash
+cd ../frontend
+cp .env.example .env
+```
+
+Edit `.env` with the CDK outputs:
+
+```
+VITE_AWS_REGION=us-east-1
+VITE_API_URL=https://abc123.execute-api.us-east-1.amazonaws.com
+VITE_USER_POOL_ID=us-east-1_ABC123
+VITE_USER_POOL_CLIENT_ID=1a2b3c4d5e6f7g8h9i0j
+```
+
+Then:
+
+```bash
+npm install
+npm run dev        # http://localhost:5173
+```
+
+Sign up with your email, confirm the code Cognito emails you, and record your
+first meeting. Recording requires **HTTPS or localhost** (browser mic policy) —
+`localhost` is fine for dev.
+
+## 4. (Optional) Host the frontend on AWS
+
+Build the static site and serve it from S3 + CloudFront:
+
+```bash
+cd frontend
+npm run build      # outputs to frontend/dist/
+```
+
+Then either:
+
+- **Quick:** create an S3 bucket with static website hosting and upload `dist/`,
+  fronted by CloudFront for HTTPS; or
+- **Extend the CDK:** add an `aws-s3-deployment` + CloudFront distribution to
+  `infra/lib/ottertest-stack.ts` so the frontend deploys alongside the backend.
+
+After hosting, tighten the two `allowOrigins: ["*"]` values in the stack (S3 CORS
+and API Gateway CORS) to your real frontend origin, and redeploy.
+
+## 5. Tearing it down
+
+```bash
+cd infra
+npm run destroy
+```
+
+The S3 bucket, DynamoDB table, and Cognito user pool use a **RETAIN** removal
+policy, so your recordings and accounts survive a stack delete. Empty/delete them
+manually in the console if you truly want everything gone.
+
+## Troubleshooting
+
+| Symptom | Likely cause / fix |
+|---------|--------------------|
+| Summary never appears, status stuck at `SUMMARIZING` | Bedrock model access not enabled, or wrong model/region. Check the `ProcessTranscriptFn` CloudWatch logs. Try a `BEDROCK_MODEL_ID` inference profile. |
+| Status stuck at `TRANSCRIBING` | Check `StartTranscriptionFn` and the Transcribe console. Very short/empty audio can fail. |
+| Mic button does nothing | The browser blocks `getUserMedia` on insecure origins — use `localhost` or HTTPS. |
+| `401` from the API | Token expired or `.env` IDs don't match the deployed pool. Re-check the CDK outputs. |
+| CORS errors in the browser | Confirm `VITE_API_URL` has no trailing slash and matches the deployed API. |
+
+## Where processing happens
+
+```
+createUploadUrl  (POST /uploads)     → reserves meeting, returns presigned S3 URL
+startTranscription (S3 event)         → Amazon Transcribe job
+processTranscript  (EventBridge)      → reads transcript, Amazon Bedrock summary
+listMeetings / getMeeting / delete    → read/manage from DynamoDB
+```
+
+All Lambda source lives in `infra/lambda/` and is bundled automatically by CDK on
+`npm run deploy`.

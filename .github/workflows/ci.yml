@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  infra:
+    name: Build infra (CDK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+        working-directory: infra
+      - name: Type-check CDK app
+        run: npm run build
+        working-directory: infra
+      - name: Synthesize CloudFormation (also bundles Lambdas)
+        run: npx cdk synth --quiet
+        working-directory: infra
+        env:
+          CDK_DEFAULT_ACCOUNT: "123456789012"
+          CDK_DEFAULT_REGION: us-east-1
+
+  frontend:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+        working-directory: frontend
+      - name: Type-check & build
+        run: npm run build
+        working-directory: frontend
