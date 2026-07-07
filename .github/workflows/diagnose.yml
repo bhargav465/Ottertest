@@ -1,0 +1,100 @@
+name: Diagnose transcription
+
+# Temporary diagnostic: reads the real Amazon Transcribe error from the account
+# using the existing OIDC deploy role. Safe/read-only except an optional repro.
+on:
+  workflow_dispatch:
+    inputs:
+      aws_region:
+        description: AWS region
+        required: true
+        default: us-east-1
+      reproduce:
+        description: "Also upload a test WAV and start a real transcription job"
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Discover resources
+        id: res
+        run: |
+          set -x
+          FN=$(aws lambda list-functions \
+            --query "Functions[?contains(FunctionName, 'StartTranscription')].FunctionName | [0]" \
+            --output text)
+          echo "fn=$FN" >> "$GITHUB_OUTPUT"
+          TABLE=$(aws lambda get-function-configuration --function-name "$FN" \
+            --query "Environment.Variables.MEETINGS_TABLE" --output text)
+          echo "table=$TABLE" >> "$GITHUB_OUTPUT"
+          BUCKET=$(aws lambda get-function-configuration --function-name "$FN" \
+            --query "Environment.Variables.MEDIA_BUCKET" --output text)
+          echo "bucket=$BUCKET" >> "$GITHUB_OUTPUT"
+          echo "Function=$FN Table=$TABLE Bucket=$BUCKET"
+
+      - name: Recent StartTranscription Lambda logs
+        run: |
+          FN="${{ steps.res.outputs.fn }}"
+          LG="/aws/lambda/$FN"
+          echo "=== Log group: $LG (last 2h) ==="
+          START=$(( ( $(date +%s) - 7200 ) * 1000 ))
+          aws logs filter-log-events --log-group-name "$LG" --start-time "$START" \
+            --query "events[].message" --output text 2>&1 | tail -n 150 \
+            || echo "(no log group / no events yet)"
+
+      - name: Failed meetings (real error field)
+        run: |
+          TABLE="${{ steps.res.outputs.table }}"
+          echo "=== FAILED meetings in $TABLE ==="
+          aws dynamodb scan --table-name "$TABLE" \
+            --filter-expression "#s = :f" \
+            --expression-attribute-names '{"#s":"status"}' \
+            --expression-attribute-values '{":f":{"S":"FAILED"}}' \
+            --query "Items[].{meetingId:meetingId.S,audioKey:audioKey.S,error:error.S}" \
+            --output json 2>&1 || echo "(scan failed)"
+
+      - name: Reproduce with a real test WAV
+        if: ${{ inputs.reproduce }}
+        run: |
+          set -x
+          BUCKET="${{ steps.res.outputs.bucket }}"
+          REGION="${{ inputs.aws_region }}"
+          ID="diagtest-$(date +%s)"
+          # Use a non-'audio/' prefix so this doesn't also trigger the real
+          # Lambda (avoids a job-name collision); we call Transcribe directly.
+          KEY="diagtest/$ID.wav"
+          # Generate 1s of 16kHz mono silence as a valid WAV (no heredoc).
+          python3 -c "import wave; w=wave.open('$ID.wav','wb'); w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes(b'\x00\x00'*16000); w.close()"
+          aws s3 cp "$ID.wav" "s3://$BUCKET/$KEY"
+          echo "=== Calling StartTranscriptionJob exactly like the Lambda ==="
+          aws transcribe start-transcription-job \
+            --transcription-job-name "$ID" \
+            --language-code en-US \
+            --media-format wav \
+            --media "MediaFileUri=s3://$BUCKET/$KEY" \
+            --output-bucket-name "$BUCKET" \
+            --output-key "transcripts/$ID.json" \
+            --settings "ShowSpeakerLabels=true,MaxSpeakerLabels=10" 2>&1 || echo "START_JOB_FAILED_ABOVE"
+          echo "=== Poll job status (up to ~90s) ==="
+          for i in $(seq 1 9); do
+            sleep 10
+            ST=$(aws transcribe get-transcription-job --transcription-job-name "$ID" \
+              --query "TranscriptionJob.TranscriptionJobStatus" --output text 2>&1 || echo "GET_FAILED")
+            RE=$(aws transcribe get-transcription-job --transcription-job-name "$ID" \
+              --query "TranscriptionJob.FailureReason" --output text 2>&1 || echo "-")
+            echo "poll $i: status=$ST failureReason=$RE"
+            [ "$ST" = "COMPLETED" ] && break
+            [ "$ST" = "FAILED" ] && break
+          done
