@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+frontend/dist/
+
+# Compiled CDK output (app runs via ts-node)
+infra/bin/**/*.js
+infra/bin/**/*.d.ts
+infra/lib/**/*.js
+infra/lib/**/*.d.ts
+
+# CDK
+infra/cdk.out/
+infra/.cdk.staging/
+cdk.context.json
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+frontend/.env
+frontend/.env.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
