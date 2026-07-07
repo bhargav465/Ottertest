@@ -3,10 +3,16 @@ import {
   TranscribeClient,
   StartTranscriptionJobCommand,
   MediaFormat,
+  LanguageCode,
 } from "@aws-sdk/client-transcribe";
 import { updateMeeting } from "./shared/dynamo";
 
 const BUCKET = process.env.MEDIA_BUCKET!;
+// A fixed language is required to combine with speaker labels — Amazon Transcribe
+// rejects ShowSpeakerLabels together with automatic language identification.
+// Override per deploy with TRANSCRIBE_LANGUAGE (e.g. en-GB, es-ES, hi-IN).
+const LANGUAGE_CODE =
+  (process.env.TRANSCRIBE_LANGUAGE as LanguageCode) || LanguageCode.EN_US;
 const transcribe = new TranscribeClient({});
 
 const FORMAT_BY_EXT: Record<string, MediaFormat> = {
@@ -41,7 +47,7 @@ export async function handler(event: S3Event): Promise<void> {
       await transcribe.send(
         new StartTranscriptionJobCommand({
           TranscriptionJobName: meetingId,
-          IdentifyLanguage: true,
+          LanguageCode: LANGUAGE_CODE,
           MediaFormat: mediaFormat,
           Media: { MediaFileUri: `s3://${BUCKET}/${key}` },
           OutputBucketName: BUCKET,
@@ -62,9 +68,11 @@ export async function handler(event: S3Event): Promise<void> {
       console.log(`Started transcription job ${meetingId}`);
     } catch (err) {
       console.error(`Failed to start transcription for ${meetingId}`, err);
+      // Surface the real AWS error so the UI shows something actionable.
+      const detail = err instanceof Error ? err.message : String(err);
       await updateMeeting(userId, meetingId, {
         status: "FAILED",
-        error: "Failed to start transcription",
+        error: `Failed to start transcription: ${detail}`,
         updatedAt: new Date().toISOString(),
       });
     }
