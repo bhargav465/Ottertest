@@ -141,9 +141,10 @@ export async function handler(
     console.log(`Summarized meeting ${meetingId}`);
   } catch (err) {
     console.error(`Failed to process transcript for ${meetingId}`, err);
+    const detail = err instanceof Error ? err.message : String(err);
     await updateMeeting(userId, meetingId, {
       status: "FAILED",
-      error: "Failed to summarize transcript",
+      error: `Failed to process transcript: ${detail}`,
       updatedAt: new Date().toISOString(),
     });
   }

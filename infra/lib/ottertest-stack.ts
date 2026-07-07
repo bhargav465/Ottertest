@@ -129,6 +129,9 @@ export class OttertestStack extends cdk.Stack {
       MEETINGS_GSI: "byMeetingId",
       BEDROCK_ENABLED: BEDROCK_ENABLED ? "true" : "false",
       BEDROCK_MODEL_ID: DEFAULT_BEDROCK_MODEL_ID,
+      // Amazon Transcribe language. Override with TRANSCRIBE_LANGUAGE at deploy
+      // (e.g. en-GB, es-ES, hi-IN). Speaker labels require a fixed language.
+      TRANSCRIBE_LANGUAGE: process.env.TRANSCRIBE_LANGUAGE ?? "en-US",
     };
 
     const commonFnProps: Partial<cdk.aws_lambda_nodejs.NodejsFunctionProps> = {
