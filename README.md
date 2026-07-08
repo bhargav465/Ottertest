@@ -16,7 +16,15 @@ Ottertest automatically:
 > `BEDROCK_ENABLED=true npm run deploy` (see below).
 
 Everything — code, infrastructure, and data — lives in your GitHub repo and your
-AWS account. No third-party SaaS.
+AWS account.
+
+**📱 Installable app (PWA).** Open the site on your phone or desktop and choose
+*Add to Home Screen* / *Install* — it runs full-screen like a native app.
+
+**🌍 Multi-language.** Transcription auto-detects the spoken language (Hindi,
+Spanish, French, German, and many more), and summaries come back in that same
+language. Force one with the `DEEPGRAM_LANGUAGE` env var (e.g. `hi`, `es`, or
+`multi` for code-switching on `nova-3`).
 
 ---
 

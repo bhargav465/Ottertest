@@ -111,6 +111,8 @@ export class OttertestStack extends cdk.Stack {
       // overrides the default model.
       DEEPGRAM_API_KEY: process.env.DEEPGRAM_API_KEY ?? "",
       DEEPGRAM_MODEL: process.env.DEEPGRAM_MODEL ?? "nova-2",
+      // Empty → auto-detect language. Or a code like "hi", "es", "multi".
+      DEEPGRAM_LANGUAGE: process.env.DEEPGRAM_LANGUAGE ?? "",
       // AI summaries + action items via Groq (Llama). Set GROQ_API_KEY (GitHub
       // secret) to enable them; leave unset for transcription-only.
       GROQ_API_KEY: process.env.GROQ_API_KEY ?? "",

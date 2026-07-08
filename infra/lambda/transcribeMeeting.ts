@@ -10,6 +10,9 @@ import {
 const BUCKET = process.env.MEDIA_BUCKET!;
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || "";
 const DEEPGRAM_MODEL = process.env.DEEPGRAM_MODEL || "nova-2";
+// Language: empty → auto-detect (any supported language). Set a code like
+// "hi", "es", "fr", or "multi" (nova-3, code-switching) to force one.
+const DEEPGRAM_LANGUAGE = process.env.DEEPGRAM_LANGUAGE || "";
 
 const s3 = new S3Client({});
 
@@ -105,6 +108,12 @@ export async function handler(event: S3Event): Promise<void> {
         smart_format: "true",
         punctuate: "true",
       });
+      // Language: force a specific one, or let Deepgram auto-detect.
+      if (DEEPGRAM_LANGUAGE) {
+        params.set("language", DEEPGRAM_LANGUAGE);
+      } else {
+        params.set("detect_language", "true");
+      }
       const contentType = MIME_BY_EXT[ext.toLowerCase()] ?? "audio/webm";
       const res = await fetch(
         `https://api.deepgram.com/v1/listen?${params.toString()}`,
