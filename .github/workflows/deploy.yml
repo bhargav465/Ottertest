@@ -108,6 +108,11 @@ jobs:
             --exclude index.html --cache-control "public,max-age=31536000,immutable"
           aws s3 cp ../frontend/dist/index.html "s3://$SITE_BUCKET/index.html" \
             --cache-control "no-cache"
+          # PWA service worker + manifest must revalidate so app updates ship.
+          for f in sw.js registerSW.js manifest.webmanifest; do
+            [ -f "../frontend/dist/$f" ] && aws s3 cp "../frontend/dist/$f" \
+              "s3://$SITE_BUCKET/$f" --cache-control "no-cache" || true
+          done
           echo "Invalidating CloudFront $DIST_ID ..."
           aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*" >/dev/null
           echo "SITE_URL=$(jq -r '.OttertestStack.SiteUrl' cdk-outputs.json)" >> "$GITHUB_ENV"

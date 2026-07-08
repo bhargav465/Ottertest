@@ -25,7 +25,10 @@ Respond with ONLY a JSON object of this exact shape:
   ]
 }
 Use empty arrays where a section has nothing. Never invent content that isn't
-supported by the transcript.`;
+supported by the transcript.
+
+Write the tldr, keyPoints, decisions, and action-item "task" text in the SAME
+language as the transcript. Keep the JSON keys exactly as shown (in English).`;
 
 async function groqChat(
   messages: Array<{ role: string; content: string }>,
