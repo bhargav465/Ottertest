@@ -59,8 +59,8 @@ jobs:
         working-directory: infra
         env:
           BEDROCK_ENABLED: ${{ inputs.bedrock_enabled }}
-          # Transcription API key (Groq). Add it as a repo secret named GROQ_API_KEY.
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          # Transcription API key (Deepgram). Add it as a repo secret named DEEPGRAM_API_KEY.
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
         run: npx cdk deploy --require-approval never --outputs-file cdk-outputs.json
 
       - name: Publish outputs to job summary
