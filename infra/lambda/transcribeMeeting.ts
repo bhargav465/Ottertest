@@ -1,13 +1,15 @@
 import type { S3Event } from "aws-lambda";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getMeeting, updateMeeting } from "./shared/dynamo";
-import { summarizeTranscript, generateTitle } from "./shared/bedrock";
+import {
+  summarizeTranscript,
+  generateTitle,
+  summariesEnabled,
+} from "./shared/summarize";
 
 const BUCKET = process.env.MEDIA_BUCKET!;
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || "";
 const DEEPGRAM_MODEL = process.env.DEEPGRAM_MODEL || "nova-2";
-// AI summarization is optional — see BEDROCK_ENABLED in the CDK stack.
-const BEDROCK_ENABLED = process.env.BEDROCK_ENABLED === "true";
 
 const s3 = new S3Client({});
 
@@ -134,35 +136,47 @@ export async function handler(event: S3Event): Promise<void> {
         continue;
       }
 
-      // Bedrock disabled: store the transcript and finish.
-      if (!BEDROCK_ENABLED) {
+      // No summary key configured: store the transcript and finish.
+      if (!summariesEnabled()) {
         await updateMeeting(userId, meetingId, {
           status: "DONE",
           transcript,
           updatedAt: new Date().toISOString(),
         });
-        console.log(`Transcribed meeting ${meetingId} (summarization disabled)`);
+        console.log(`Transcribed meeting ${meetingId} (summaries disabled)`);
         continue;
       }
 
-      // Optional AI summary + action items via Amazon Bedrock.
+      // AI summary + action items via Groq (Llama). If it fails, still keep the
+      // transcript — don't fail the whole meeting over a summary hiccup.
       const meeting = await getMeeting(userId, meetingId);
       await updateMeeting(userId, meetingId, {
         status: "SUMMARIZING",
         updatedAt: new Date().toISOString(),
       });
-      const [summary, autoTitle] = await Promise.all([
-        summarizeTranscript(transcript, meeting?.ownerEmail),
-        meeting?.autoTitle ? generateTitle(transcript) : Promise.resolve(null),
-      ]);
-      await updateMeeting(userId, meetingId, {
-        status: "DONE",
-        transcript,
-        summary,
-        ...(autoTitle ? { title: autoTitle } : {}),
-        updatedAt: new Date().toISOString(),
-      });
-      console.log(`Summarized meeting ${meetingId}`);
+      try {
+        const [summary, autoTitle] = await Promise.all([
+          summarizeTranscript(transcript, meeting?.ownerEmail),
+          meeting?.autoTitle
+            ? generateTitle(transcript)
+            : Promise.resolve(null),
+        ]);
+        await updateMeeting(userId, meetingId, {
+          status: "DONE",
+          transcript,
+          summary,
+          ...(autoTitle ? { title: autoTitle } : {}),
+          updatedAt: new Date().toISOString(),
+        });
+        console.log(`Summarized meeting ${meetingId}`);
+      } catch (summaryErr) {
+        console.error(`Summary failed for ${meetingId}`, summaryErr);
+        await updateMeeting(userId, meetingId, {
+          status: "DONE",
+          transcript,
+          updatedAt: new Date().toISOString(),
+        });
+      }
     } catch (err) {
       console.error(`Failed to transcribe ${key}`, err);
       const detail = err instanceof Error ? err.message : String(err);

@@ -87,7 +87,7 @@ export function MeetingDetail({
           {meeting.status === "TRANSCRIBING" &&
             "Transcribing your meeting…"}
           {meeting.status === "SUMMARIZING" &&
-            "Summarizing with Amazon Bedrock…"}
+            "Summarizing and extracting action items…"}
         </div>
       )}
 
@@ -121,7 +121,7 @@ export function MeetingDetail({
               <button className="btn link" onClick={() => setTab("transcript")}>
                 Transcript
               </button>{" "}
-              tab to read it. Enable Amazon Bedrock to get automatic summaries.
+              tab to read it. Set a GROQ_API_KEY to get automatic summaries.
             </div>
           )}
 
