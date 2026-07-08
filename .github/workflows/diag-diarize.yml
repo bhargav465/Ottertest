@@ -17,9 +17,9 @@ jobs:
         run: |
           set -e
           for u in \
-            https://dpgr.am/spacewalk.wav \
             https://static.deepgram.com/examples/interview_speech-analytics.wav \
-            https://static.deepgram.com/examples/nasa-spacewalk-interview.wav ; do
+            https://static.deepgram.com/examples/nasa-spacewalk-interview.wav \
+            https://github.com/deepgram-devs/code-samples/raw/main/python/audio/interview.wav ; do
             echo "trying $u"
             if curl -fsSL "$u" -o sample.wav && [ "$(stat -c%s sample.wav)" -gt 10000 ]; then
               echo "downloaded $u ($(stat -c%s sample.wav) bytes)"; break
@@ -48,8 +48,10 @@ jobs:
             fi
             n=$(jq '[.results.channels[0].alternatives[0].words[].speaker] | unique | length' resp.json)
             ids=$(jq -c '[.results.channels[0].alternatives[0].words[].speaker] | unique' resp.json)
+            words=$(jq '.results.channels[0].alternatives[0].words | length' resp.json)
             lang=$(jq -r '.results.channels[0].detected_language // "n/a"' resp.json)
-            echo "  distinct speakers: $n   speaker ids: $ids   detected_language: $lang"
+            echo "  distinct speakers: $n   speaker ids: $ids   words: $words   detected_language: $lang"
+            jq -r '.results.channels[0].alternatives[0].transcript[0:160]' resp.json | sed 's/^/  transcript: /'
           }
           probe "FIX  → nova-3 + language=multi + diarize" \
             "model=nova-3&diarize=true&smart_format=true&punctuate=true&language=multi"
