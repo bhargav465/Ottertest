@@ -4,19 +4,68 @@ import { getMeeting, updateMeeting } from "./shared/dynamo";
 import { summarizeTranscript, generateTitle } from "./shared/bedrock";
 
 const BUCKET = process.env.MEDIA_BUCKET!;
-const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
-// whisper-large-v3-turbo is Groq's cheapest + fastest speech model.
-const GROQ_MODEL = process.env.GROQ_MODEL || "whisper-large-v3-turbo";
-const GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
+const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || "";
+const DEEPGRAM_MODEL = process.env.DEEPGRAM_MODEL || "nova-2";
 // AI summarization is optional — see BEDROCK_ENABLED in the CDK stack.
 const BEDROCK_ENABLED = process.env.BEDROCK_ENABLED === "true";
 
 const s3 = new S3Client({});
 
+const MIME_BY_EXT: Record<string, string> = {
+  webm: "audio/webm",
+  ogg: "audio/ogg",
+  mp4: "audio/mp4",
+  m4a: "audio/mp4",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  flac: "audio/flac",
+};
+
+interface DeepgramWord {
+  word: string;
+  punctuated_word?: string;
+  speaker?: number;
+}
+
+/** Build a speaker-labelled transcript from Deepgram's diarized words. */
+function buildTranscript(data: any): string {
+  const alt = data?.results?.channels?.[0]?.alternatives?.[0];
+  if (!alt) return "";
+  const words: DeepgramWord[] = alt.words ?? [];
+  if (words.length === 0) return (alt.transcript ?? "").trim();
+
+  const lines: string[] = [];
+  let currentSpeaker: number | undefined;
+  let buffer: string[] = [];
+
+  const flush = () => {
+    if (buffer.length) {
+      const label =
+        currentSpeaker === undefined
+          ? "Speaker"
+          : `Speaker ${currentSpeaker + 1}`;
+      lines.push(`${label}: ${buffer.join(" ")}`);
+      buffer = [];
+    }
+  };
+
+  for (const w of words) {
+    const speaker = w.speaker ?? 0;
+    if (speaker !== currentSpeaker) {
+      flush();
+      currentSpeaker = speaker;
+    }
+    buffer.push(w.punctuated_word ?? w.word);
+  }
+  flush();
+
+  return lines.length ? lines.join("\n") : (alt.transcript ?? "").trim();
+}
+
 /**
- * S3 ObjectCreated (prefix audio/) → transcribe the recording with Groq
- * (hosted Whisper) and store the transcript. Groq is synchronous, so this one
- * Lambda replaces the old start/poll two-step Amazon Transcribe pipeline.
+ * S3 ObjectCreated (prefix audio/) → transcribe the recording with Deepgram
+ * (Nova-2, speaker diarization) and store the speaker-labelled transcript.
+ * Deepgram is synchronous, so one Lambda covers the whole pipeline.
  * Key layout: audio/{userId}/{meetingId}.{ext}
  */
 export async function handler(event: S3Event): Promise<void> {
@@ -30,9 +79,9 @@ export async function handler(event: S3Event): Promise<void> {
     const [, userId, meetingId, ext] = match;
 
     try {
-      if (!GROQ_API_KEY) {
+      if (!DEEPGRAM_API_KEY) {
         throw new Error(
-          "GROQ_API_KEY is not configured (add it as a GitHub secret and redeploy)"
+          "DEEPGRAM_API_KEY is not configured (add it as a GitHub secret and redeploy)"
         );
       }
 
@@ -47,28 +96,35 @@ export async function handler(event: S3Event): Promise<void> {
       );
       const audio = await obj.Body!.transformToByteArray();
 
-      // Send it to Groq's Whisper endpoint (multipart form). fetch/FormData/Blob
-      // are globals in the Node 20 runtime — no extra dependencies needed.
-      const form = new FormData();
-      form.append("file", new Blob([audio]), `audio.${ext}`);
-      form.append("model", GROQ_MODEL);
-      form.append("response_format", "json");
-
-      const res = await fetch(GROQ_URL, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
-        body: form,
+      // Send raw audio to Deepgram with diarization + smart formatting.
+      const params = new URLSearchParams({
+        model: DEEPGRAM_MODEL,
+        diarize: "true",
+        smart_format: "true",
+        punctuate: "true",
       });
+      const contentType = MIME_BY_EXT[ext.toLowerCase()] ?? "audio/webm";
+      const res = await fetch(
+        `https://api.deepgram.com/v1/listen?${params.toString()}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Token ${DEEPGRAM_API_KEY}`,
+            "Content-Type": contentType,
+          },
+          body: audio,
+        }
+      );
 
       if (!res.ok) {
         const body = await res.text().catch(() => "");
-        throw new Error(`Groq API ${res.status}: ${body.slice(0, 300)}`);
+        throw new Error(`Deepgram API ${res.status}: ${body.slice(0, 300)}`);
       }
 
-      const data = (await res.json()) as { text?: string };
-      const transcript = (data.text || "").trim();
+      const data = await res.json();
+      const transcript = buildTranscript(data);
 
-      if (!transcript) {
+      if (!transcript.trim()) {
         await updateMeeting(userId, meetingId, {
           status: "FAILED",
           error: "Empty transcript (no speech detected)",

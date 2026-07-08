@@ -127,10 +127,11 @@ export class OttertestStack extends cdk.Stack {
       MEETINGS_GSI: "byMeetingId",
       BEDROCK_ENABLED: BEDROCK_ENABLED ? "true" : "false",
       BEDROCK_MODEL_ID: DEFAULT_BEDROCK_MODEL_ID,
-      // Transcription via Groq (hosted Whisper). Supply GROQ_API_KEY at deploy
-      // (from a GitHub secret). GROQ_MODEL overrides the default whisper model.
-      GROQ_API_KEY: process.env.GROQ_API_KEY ?? "",
-      GROQ_MODEL: process.env.GROQ_MODEL ?? "whisper-large-v3-turbo",
+      // Transcription via Deepgram (Nova-2 + speaker diarization). Supply
+      // DEEPGRAM_API_KEY at deploy (from a GitHub secret). DEEPGRAM_MODEL
+      // overrides the default model.
+      DEEPGRAM_API_KEY: process.env.DEEPGRAM_API_KEY ?? "",
+      DEEPGRAM_MODEL: process.env.DEEPGRAM_MODEL ?? "nova-2",
     };
 
     const commonFnProps: Partial<cdk.aws_lambda_nodejs.NodejsFunctionProps> = {

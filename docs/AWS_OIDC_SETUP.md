@@ -60,17 +60,18 @@ tab → New repository variable**:
 
 ---
 
-## Step 2b — Add the Groq API key (transcription)
+## Step 2b — Add the Deepgram API key (transcription)
 
-Transcription uses **Groq** (hosted Whisper) — cheap, fast, and it avoids AWS
-service-activation issues. Get a free key at <https://console.groq.com> →
-*API Keys*. Then add it as a **secret** (not a variable — it's sensitive):
+Transcription uses **Deepgram** (Nova-2, with speaker labels) — cheap, fast, and
+it avoids AWS service-activation issues. Get a key at
+<https://console.deepgram.com> → *API Keys* (free credit to start). Then add it
+as a **secret** (not a variable — it's sensitive):
 
 **Settings → Secrets and variables → Actions → Secrets → New repository secret**
 
 | Name | Value |
 |------|-------|
-| `GROQ_API_KEY` | your Groq API key (starts with `gsk_…`) |
+| `DEEPGRAM_API_KEY` | your Deepgram API key |
 
 ## Step 3 — Deploy
 
