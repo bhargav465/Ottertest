@@ -1,7 +1,7 @@
 name: Diag Diarization
 
 # Temporary: verifies Deepgram speaker diarization across model/language configs
-# on a known multi-speaker sample. Runs on push to the fix branch only.
+# on genuinely multi-speaker audio. Runs on push to the fix branch only.
 on:
   push:
     branches: [fix/nova3-diarization]
@@ -13,51 +13,54 @@ jobs:
   diag:
     runs-on: ubuntu-latest
     steps:
-      - name: Download a known multi-speaker sample
+      - name: Build a synthetic 2-speaker conversation
         run: |
-          set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq espeak-ng ffmpeg >/dev/null
+          say() { espeak-ng -v "$1" -s 145 -p "$3" -w "$4" "$2"; }
+          # Two clearly distinct synthetic voices, alternating turns.
+          say en+m3 "Hello everyone, this is the first speaker. Let us begin the quarterly review meeting now." 30 a1.wav
+          say en+f4 "Thanks. This is the second speaker here. I would like to talk about the marketing budget first." 80 b1.wav
+          say en+m3 "That sounds good to me. I will cover the engineering roadmap right after your section finishes." 30 a2.wav
+          say en+f4 "Perfect. Then let us also make sure we agree on the launch date before we end this call." 80 b2.wav
+          printf "file '%s'\n" a1.wav b1.wav a2.wav b2.wav > list.txt
+          ffmpeg -y -f concat -safe 0 -i list.txt -ar 16000 -ac 1 convo.wav >/dev/null 2>&1
+          ls -la convo.wav
+
+      - name: Also fetch a real interview clip
+        run: |
           for u in \
-            https://static.deepgram.com/examples/interview_speech-analytics.wav \
             https://static.deepgram.com/examples/nasa-spacewalk-interview.wav \
-            https://github.com/deepgram-devs/code-samples/raw/main/python/audio/interview.wav ; do
-            echo "trying $u"
-            if curl -fsSL "$u" -o sample.wav && [ "$(stat -c%s sample.wav)" -gt 10000 ]; then
-              echo "downloaded $u ($(stat -c%s sample.wav) bytes)"; break
+            https://static.deepgram.com/examples/interview_speech-analytics.wav ; do
+            if curl -fsSL "$u" -o interview.wav && [ "$(stat -c%s interview.wav)" -gt 10000 ]; then
+              echo "downloaded $u"; break
             fi
           done
-          ls -la sample.wav
+          ls -la interview.wav || echo "no interview file"
 
       - name: Probe Deepgram configs
         env:
           DG: ${{ secrets.DEEPGRAM_API_KEY }}
         run: |
           probe() {
-            label="$1"; qs="$2"
-            echo "==================================================="
-            echo "$label"
-            echo "  $qs"
+            file="$1"; label="$2"; qs="$3"
             code=$(curl -s -o resp.json -w '%{http_code}' -X POST \
               "https://api.deepgram.com/v1/listen?$qs" \
               -H "Authorization: Token $DG" \
               -H "Content-Type: audio/wav" \
-              --data-binary @sample.wav)
-            echo "  HTTP $code"
+              --data-binary @"$file")
             if [ "$code" != "200" ]; then
-              echo "  RESPONSE:"; jq -c '{err_code,err_msg,error,message}' resp.json 2>/dev/null || head -c 300 resp.json
-              echo; return
+              echo "  [$label on $file] HTTP $code"; jq -c '{err_code,err_msg}' resp.json 2>/dev/null; return
             fi
             n=$(jq '[.results.channels[0].alternatives[0].words[].speaker] | unique | length' resp.json)
             ids=$(jq -c '[.results.channels[0].alternatives[0].words[].speaker] | unique' resp.json)
-            words=$(jq '.results.channels[0].alternatives[0].words | length' resp.json)
-            lang=$(jq -r '.results.channels[0].detected_language // "n/a"' resp.json)
-            echo "  distinct speakers: $n   speaker ids: $ids   words: $words   detected_language: $lang"
-            jq -r '.results.channels[0].alternatives[0].transcript[0:160]' resp.json | sed 's/^/  transcript: /'
+            echo "  [$label on $file]  distinct speakers: $n   ids: $ids"
           }
-          probe "FIX  → nova-3 + language=multi + diarize" \
-            "model=nova-3&diarize=true&smart_format=true&punctuate=true&language=multi"
-          probe "BUG  → nova-2 + detect_language + diarize" \
-            "model=nova-2&diarize=true&smart_format=true&punctuate=true&detect_language=true"
-          probe "CTRL → nova-3 + language=en + diarize" \
-            "model=nova-3&diarize=true&smart_format=true&punctuate=true&language=en"
-          echo "==================================================="
-          echo "Expected: FIX and CTRL show >=2 speakers; BUG shows 1."
+          for f in convo.wav interview.wav; do
+            [ -f "$f" ] || continue
+            echo "=== $f ==="
+            probe "$f" "FIX nova-3 multi"  "model=nova-3&diarize=true&smart_format=true&punctuate=true&language=multi"
+            probe "$f" "BUG nova-2 detect" "model=nova-2&diarize=true&smart_format=true&punctuate=true&detect_language=true"
+            probe "$f" "nova-3 en"         "model=nova-3&diarize=true&smart_format=true&punctuate=true&language=en"
+          done
+          echo "Expected on a true 2-speaker file: nova-3 shows 2; nova-2+detect may show 1."
