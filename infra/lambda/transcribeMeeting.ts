@@ -9,10 +9,13 @@ import {
 
 const BUCKET = process.env.MEDIA_BUCKET!;
 const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || "";
-const DEEPGRAM_MODEL = process.env.DEEPGRAM_MODEL || "nova-2";
-// Language: empty → auto-detect (any supported language). Set a code like
-// "hi", "es", "fr", or "multi" (nova-3, code-switching) to force one.
-const DEEPGRAM_LANGUAGE = process.env.DEEPGRAM_LANGUAGE || "";
+// nova-3 is required for reliable diarization + multilingual together. nova-2's
+// language auto-detect collapses every speaker onto one label; nova-3 with
+// language=multi keeps speaker separation while handling many languages.
+const DEEPGRAM_MODEL = process.env.DEEPGRAM_MODEL || "nova-3";
+// Language: empty → "multi" (nova-3 multilingual code-switching, keeps
+// diarization working). Or force a code like "en", "hi", "es", "fr".
+const DEEPGRAM_LANGUAGE = process.env.DEEPGRAM_LANGUAGE || "multi";
 
 const s3 = new S3Client({});
 
@@ -102,18 +105,15 @@ export async function handler(event: S3Event): Promise<void> {
       const audio = await obj.Body!.transformToByteArray();
 
       // Send raw audio to Deepgram with diarization + smart formatting.
+      // language=multi (nova-3) transcribes many languages while preserving
+      // speaker labels; a specific code (e.g. "en", "hi") also works on nova-3.
       const params = new URLSearchParams({
         model: DEEPGRAM_MODEL,
         diarize: "true",
         smart_format: "true",
         punctuate: "true",
+        language: DEEPGRAM_LANGUAGE,
       });
-      // Language: force a specific one, or let Deepgram auto-detect.
-      if (DEEPGRAM_LANGUAGE) {
-        params.set("language", DEEPGRAM_LANGUAGE);
-      } else {
-        params.set("detect_language", "true");
-      }
       const contentType = MIME_BY_EXT[ext.toLowerCase()] ?? "audio/webm";
       const res = await fetch(
         `https://api.deepgram.com/v1/listen?${params.toString()}`,
