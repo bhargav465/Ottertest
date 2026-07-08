@@ -81,19 +81,37 @@ export function createUpload(input: {
   });
 }
 
-/** PUT the recorded blob straight to S3 via the presigned URL. */
+/**
+ * PUT the recorded blob straight to S3 via the presigned URL, retrying a few
+ * times on transient network / 5xx errors (mobile connections drop often).
+ */
 export async function uploadAudio(
   ticket: UploadTicket,
-  blob: Blob
+  blob: Blob,
+  attempts = 3
 ): Promise<void> {
-  const res = await fetch(ticket.uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": ticket.contentType },
-    body: blob,
-  });
-  if (!res.ok) {
-    throw new Error(`Upload failed: ${res.status}`);
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(ticket.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": ticket.contentType },
+        body: blob,
+      });
+      if (res.ok) return;
+      // 4xx (other than throttling) won't succeed on retry — fail fast.
+      if (res.status < 500 && res.status !== 408 && res.status !== 429) {
+        throw new Error(`Upload failed: ${res.status}`);
+      }
+      lastErr = new Error(`Upload failed: ${res.status}`);
+    } catch (e) {
+      lastErr = e;
+    }
+    if (i < attempts - 1) {
+      await new Promise((r) => setTimeout(r, 600 * 2 ** i));
+    }
   }
+  throw lastErr instanceof Error ? lastErr : new Error("Upload failed");
 }
 
 export async function listMeetings(): Promise<MeetingListItem[]> {
