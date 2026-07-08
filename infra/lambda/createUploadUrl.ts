@@ -16,7 +16,13 @@ import {
 import type { Meeting } from "./shared/types";
 
 const BUCKET = process.env.MEDIA_BUCKET!;
-const s3 = new S3Client({});
+// `requestChecksumCalculation: "WHEN_REQUIRED"` is essential here. Newer AWS SDK
+// versions (which the Lambda runtime periodically upgrades to) default to
+// "WHEN_SUPPORTED", which bakes an `x-amz-checksum-crc32` of an *empty* body
+// into presigned PUT URLs. The browser then PUTs the real audio, S3 recomputes
+// the checksum, it doesn't match, and the upload is rejected — so recordings
+// silently fail to save. Forcing "WHEN_REQUIRED" keeps the URL checksum-free.
+const s3 = new S3Client({ requestChecksumCalculation: "WHEN_REQUIRED" });
 
 interface CreateUploadBody {
   title?: string;

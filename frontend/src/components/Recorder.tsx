@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from "react";
-import { createUpload, uploadAudio } from "../lib/api";
+import { createUpload, uploadAudio, deleteMeeting } from "../lib/api";
 
 function pickMimeType(): string {
   const candidates = [
@@ -120,9 +120,10 @@ export function Recorder({ onUploaded }: { onUploaded: () => void }) {
       return;
     }
     setState("uploading");
+    const contentType = mimeRef.current.split(";")[0];
+    let ticket;
     try {
-      const contentType = mimeRef.current.split(";")[0];
-      const ticket = await createUpload({
+      ticket = await createUpload({
         title: title.trim() || undefined,
         contentType,
         durationSeconds: duration,
@@ -133,7 +134,16 @@ export function Recorder({ onUploaded }: { onUploaded: () => void }) {
       setState("idle");
       onUploaded();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
+      // If the placeholder record was created but the upload failed, remove it
+      // so it doesn't linger in the list stuck on "Uploading…".
+      if (ticket) {
+        deleteMeeting(ticket.meetingId).catch(() => {});
+      }
+      setError(
+        e instanceof Error
+          ? `${e.message}. Your recording was not saved — please try again.`
+          : "Upload failed — please try again."
+      );
       setState("idle");
     }
   };
@@ -156,6 +166,14 @@ export function Recorder({ onUploaded }: { onUploaded: () => void }) {
         {state === "recording" && <span className="rec-dot" />}
         {fmt(elapsed)}
       </div>
+
+      {state === "recording" && (
+        <div className="equalizer" aria-hidden="true">
+          {Array.from({ length: 9 }).map((_, i) => (
+            <span key={i} style={{ animationDelay: `${i * 0.09}s` }} />
+          ))}
+        </div>
+      )}
 
       <div className="recorder-controls">
         {state === "idle" && (
