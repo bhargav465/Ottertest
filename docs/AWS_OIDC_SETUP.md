@@ -60,6 +60,18 @@ tab → New repository variable**:
 
 ---
 
+## Step 2b — Add the Groq API key (transcription)
+
+Transcription uses **Groq** (hosted Whisper) — cheap, fast, and it avoids AWS
+service-activation issues. Get a free key at <https://console.groq.com> →
+*API Keys*. Then add it as a **secret** (not a variable — it's sensitive):
+
+**Settings → Secrets and variables → Actions → Secrets → New repository secret**
+
+| Name | Value |
+|------|-------|
+| `GROQ_API_KEY` | your Groq API key (starts with `gsk_…`) |
+
 ## Step 3 — Deploy
 
 1. Go to the repo's **Actions** tab → **Deploy to AWS** → **Run workflow**.
