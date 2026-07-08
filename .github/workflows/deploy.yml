@@ -10,10 +10,6 @@ on:
         description: AWS region to deploy to
         required: true
         default: us-east-1
-      bedrock_enabled:
-        description: "Enable Amazon Bedrock AI summaries (needs Bedrock model access)"
-        type: boolean
-        default: false
 
 permissions:
   id-token: write # required to request the OIDC token
@@ -51,16 +47,15 @@ jobs:
 
       - name: Bootstrap CDK (idempotent)
         working-directory: infra
-        env:
-          BEDROCK_ENABLED: ${{ inputs.bedrock_enabled }}
         run: npx cdk bootstrap
 
       - name: Deploy stack
         working-directory: infra
         env:
-          BEDROCK_ENABLED: ${{ inputs.bedrock_enabled }}
-          # Transcription API key (Deepgram). Add it as a repo secret named DEEPGRAM_API_KEY.
+          # Transcription (Deepgram) and summaries (Groq) API keys — add each as
+          # a repo secret. GROQ_API_KEY is optional (transcription-only if unset).
           DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: npx cdk deploy --require-approval never --outputs-file cdk-outputs.json
 
       - name: Publish outputs to job summary
@@ -70,8 +65,6 @@ jobs:
           echo "api=$(jq -r '.OttertestStack.ApiUrl' cdk-outputs.json)" >> "$GITHUB_OUTPUT"
           {
             echo "## 🦦 Ottertest deployed"
-            echo ""
-            echo "Bedrock summaries: **${{ inputs.bedrock_enabled }}**"
             echo ""
             echo "| Output | Value |"
             echo "|--------|-------|"

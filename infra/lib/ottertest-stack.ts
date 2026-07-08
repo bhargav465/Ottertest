@@ -4,7 +4,6 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import * as iam from "aws-cdk-lib/aws-iam";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as apigw from "aws-cdk-lib/aws-apigatewayv2";
 import * as apigwAuth from "aws-cdk-lib/aws-apigatewayv2-authorizers";
@@ -13,24 +12,6 @@ import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as path from "path";
-
-/**
- * AI summarization with Amazon Bedrock is OPTIONAL and OFF by default.
- * Enable it once you've turned on Bedrock model access in your account:
- *   BEDROCK_ENABLED=true npm run deploy
- * With it off, meetings are still recorded to S3 and transcribed with Amazon
- * Transcribe — you just won't get the AI summary + action items yet.
- */
-const BEDROCK_ENABLED = process.env.BEDROCK_ENABLED === "true";
-
-/**
- * The Bedrock model used to summarize meetings (only used when BEDROCK_ENABLED).
- * Claude 3.5 Sonnet balances quality and cost. Override with BEDROCK_MODEL_ID,
- * e.g. an inference-profile ID for cross-region access.
- */
-const DEFAULT_BEDROCK_MODEL_ID =
-  process.env.BEDROCK_MODEL_ID ??
-  "anthropic.claude-3-5-sonnet-20240620-v1:0";
 
 export class OttertestStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -125,13 +106,15 @@ export class OttertestStack extends cdk.Stack {
       MEDIA_BUCKET: mediaBucket.bucketName,
       MEETINGS_TABLE: meetingsTable.tableName,
       MEETINGS_GSI: "byMeetingId",
-      BEDROCK_ENABLED: BEDROCK_ENABLED ? "true" : "false",
-      BEDROCK_MODEL_ID: DEFAULT_BEDROCK_MODEL_ID,
       // Transcription via Deepgram (Nova-2 + speaker diarization). Supply
       // DEEPGRAM_API_KEY at deploy (from a GitHub secret). DEEPGRAM_MODEL
       // overrides the default model.
       DEEPGRAM_API_KEY: process.env.DEEPGRAM_API_KEY ?? "",
       DEEPGRAM_MODEL: process.env.DEEPGRAM_MODEL ?? "nova-2",
+      // AI summaries + action items via Groq (Llama). Set GROQ_API_KEY (GitHub
+      // secret) to enable them; leave unset for transcription-only.
+      GROQ_API_KEY: process.env.GROQ_API_KEY ?? "",
+      GROQ_LLM_MODEL: process.env.GROQ_LLM_MODEL ?? "llama-3.3-70b-versatile",
     };
 
     const commonFnProps: Partial<cdk.aws_lambda_nodejs.NodejsFunctionProps> = {
@@ -146,7 +129,6 @@ export class OttertestStack extends cdk.Stack {
           "@aws-sdk/s3-request-presigner",
           "@aws-sdk/client-dynamodb",
           "@aws-sdk/lib-dynamodb",
-          "@aws-sdk/client-bedrock-runtime",
         ],
         minify: true,
         sourceMap: true,
@@ -196,22 +178,10 @@ export class OttertestStack extends cdk.Stack {
     meetingsTable.grantReadWriteData(deleteMeetingFn);
     meetingsTable.grantReadWriteData(transcribeFn);
 
-    // Amazon Bedrock (Claude) — only granted when summarization is enabled.
-    // InvokeModel on foundation models + inference profiles.
-    if (BEDROCK_ENABLED) {
-      transcribeFn.addToRolePolicy(
-        new iam.PolicyStatement({
-          actions: ["bedrock:InvokeModel"],
-          resources: [
-            `arn:aws:bedrock:*::foundation-model/*`,
-            `arn:aws:bedrock:*:${this.account}:inference-profile/*`,
-          ],
-        })
-      );
-    }
+    // Summaries run via Groq (external HTTPS) — no extra AWS permissions needed.
 
     // ---------------------------------------------------------------------
-    // Event wiring: new audio object in S3 → transcribe it with Groq.
+    // Event wiring: new audio object in S3 → transcribe + summarize.
     // ---------------------------------------------------------------------
     mediaBucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,
@@ -315,9 +285,6 @@ export class OttertestStack extends cdk.Stack {
     new cdk.CfnOutput(this, "Region", { value: this.region });
     new cdk.CfnOutput(this, "MediaBucketName", {
       value: mediaBucket.bucketName,
-    });
-    new cdk.CfnOutput(this, "BedrockModelId", {
-      value: DEFAULT_BEDROCK_MODEL_ID,
     });
     new cdk.CfnOutput(this, "SiteBucketName", {
       value: siteBucket.bucketName,

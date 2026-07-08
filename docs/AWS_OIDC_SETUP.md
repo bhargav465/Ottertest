@@ -73,12 +73,23 @@ as a **secret** (not a variable — it's sensitive):
 |------|-------|
 | `DEEPGRAM_API_KEY` | your Deepgram API key |
 
+## Step 2c — Add the Groq API key (AI summaries — optional)
+
+For automatic **summaries + action items**, add a **Groq** key (free at
+<https://console.groq.com> → *API Keys*). Uses Llama — no AWS Bedrock activation
+needed. Add it as another **secret**:
+
+| Name | Value |
+|------|-------|
+| `GROQ_API_KEY` | your Groq API key (`gsk_…`) |
+
+Leave it out for transcription-only; add it anytime and redeploy to turn
+summaries on.
+
 ## Step 3 — Deploy
 
 1. Go to the repo's **Actions** tab → **Deploy to AWS** → **Run workflow**.
-2. Pick your **region** (must match where you created the role) and whether to
-   enable **Bedrock AI summaries** (leave off unless you've enabled Bedrock model
-   access).
+2. Pick your **region** (must match where you created the role).
 3. **Run workflow.**
 
 The workflow will:
@@ -94,8 +105,7 @@ The workflow will:
 
 When it's done, open the **`SiteUrl`** from the run summary — that's your live
 app. (First deploy: CloudFront may take a few minutes to propagate.) To enable AI
-summaries later, just re-run with **Bedrock** checked (after enabling model
-access in the Bedrock console).
+summaries later, add the `GROQ_API_KEY` secret and re-run the deploy.
 
 ---
 

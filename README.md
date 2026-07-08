@@ -57,7 +57,7 @@ AWS account. No third-party SaaS.
 | Infrastructure | **AWS CDK** (TypeScript) | `infra/lib/ottertest-stack.ts` |
 | Audio + transcript storage | **S3** (private, encrypted, versioned) | `infra/lib/ottertest-stack.ts` |
 | Speech-to-text | **Deepgram** (Nova-2, speaker-labelled) — cheap + fast, needs a `DEEPGRAM_API_KEY` | `infra/lambda/transcribeMeeting.ts` |
-| Summaries / actions | **Amazon Bedrock (Claude)** — *optional, off by default* | `BEDROCK_ENABLED` / `BEDROCK_MODEL_ID` env vars |
+| Summaries / actions | **Groq (Llama)** — *optional; on when `GROQ_API_KEY` is set* | `GROQ_API_KEY` / `GROQ_LLM_MODEL` env vars |
 | Auth | **Amazon Cognito** | `infra/lib/ottertest-stack.ts` |
 | Metadata | **DynamoDB** | `infra/lib/ottertest-stack.ts` |
 | Frontend | **React + Vite** | `frontend/` |
