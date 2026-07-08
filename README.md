@@ -56,7 +56,7 @@ AWS account. No third-party SaaS.
 |---------|--------|-----------------|
 | Infrastructure | **AWS CDK** (TypeScript) | `infra/lib/ottertest-stack.ts` |
 | Audio + transcript storage | **S3** (private, encrypted, versioned) | `infra/lib/ottertest-stack.ts` |
-| Speech-to-text | **Amazon Transcribe** | `infra/lambda/startTranscription.ts` |
+| Speech-to-text | **Groq** (hosted Whisper large-v3-turbo) — cheap + fast, needs a `GROQ_API_KEY` | `infra/lambda/transcribeMeeting.ts` |
 | Summaries / actions | **Amazon Bedrock (Claude)** — *optional, off by default* | `BEDROCK_ENABLED` / `BEDROCK_MODEL_ID` env vars |
 | Auth | **Amazon Cognito** | `infra/lib/ottertest-stack.ts` |
 | Metadata | **DynamoDB** | `infra/lib/ottertest-stack.ts` |
@@ -69,8 +69,11 @@ These defaults keep 100% of your data inside your AWS account. See
 
 ## Quick start
 
-> Prerequisites: an AWS account, AWS CLI configured (`aws configure`), and
-> Node.js 20+. **No Bedrock access needed** unless you turn on AI summaries.
+> Prerequisites: an AWS account, AWS CLI configured (`aws configure`),
+> Node.js 20+, and a free **Groq API key** (from <https://console.groq.com>)
+> for transcription — set it as `GROQ_API_KEY` (GitHub secret, or `export`
+> before `cdk deploy`). **No Bedrock access needed** unless you turn on AI
+> summaries.
 
 ```bash
 # 1. Deploy the backend + infrastructure

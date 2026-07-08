@@ -10,8 +10,6 @@ import * as apigw from "aws-cdk-lib/aws-apigatewayv2";
 import * as apigwAuth from "aws-cdk-lib/aws-apigatewayv2-authorizers";
 import * as apigwInt from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import * as s3n from "aws-cdk-lib/aws-s3-notifications";
-import * as events from "aws-cdk-lib/aws-events";
-import * as targets from "aws-cdk-lib/aws-events-targets";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as path from "path";
@@ -129,9 +127,10 @@ export class OttertestStack extends cdk.Stack {
       MEETINGS_GSI: "byMeetingId",
       BEDROCK_ENABLED: BEDROCK_ENABLED ? "true" : "false",
       BEDROCK_MODEL_ID: DEFAULT_BEDROCK_MODEL_ID,
-      // Amazon Transcribe language. Override with TRANSCRIBE_LANGUAGE at deploy
-      // (e.g. en-GB, es-ES, hi-IN). Speaker labels require a fixed language.
-      TRANSCRIBE_LANGUAGE: process.env.TRANSCRIBE_LANGUAGE ?? "en-US",
+      // Transcription via Groq (hosted Whisper). Supply GROQ_API_KEY at deploy
+      // (from a GitHub secret). GROQ_MODEL overrides the default whisper model.
+      GROQ_API_KEY: process.env.GROQ_API_KEY ?? "",
+      GROQ_MODEL: process.env.GROQ_MODEL ?? "whisper-large-v3-turbo",
     };
 
     const commonFnProps: Partial<cdk.aws_lambda_nodejs.NodejsFunctionProps> = {
@@ -146,7 +145,6 @@ export class OttertestStack extends cdk.Stack {
           "@aws-sdk/s3-request-presigner",
           "@aws-sdk/client-dynamodb",
           "@aws-sdk/lib-dynamodb",
-          "@aws-sdk/client-transcribe",
           "@aws-sdk/client-bedrock-runtime",
         ],
         minify: true,
@@ -174,51 +172,33 @@ export class OttertestStack extends cdk.Stack {
     const getMeetingFn = makeFn("GetMeetingFn", "getMeeting.ts");
     const deleteMeetingFn = makeFn("DeleteMeetingFn", "deleteMeeting.ts");
 
-    // -- Async pipeline handlers --------------------------------------------
-    const startTranscriptionFn = makeFn(
-      "StartTranscriptionFn",
-      "startTranscription.ts"
-    );
-    const processTranscriptFn = makeFn(
-      "ProcessTranscriptFn",
-      "processTranscript.ts",
-      { timeout: cdk.Duration.minutes(2), memorySize: 1024 }
-    );
+    // -- Async pipeline handler --------------------------------------------
+    // Single Groq-based Lambda: downloads the audio, transcribes it (Whisper),
+    // and (optionally) summarizes it. Groq is synchronous, so there's no
+    // separate poll/callback step. Generous timeout for longer recordings.
+    const transcribeFn = makeFn("TranscribeFn", "transcribeMeeting.ts", {
+      timeout: cdk.Duration.minutes(3),
+      memorySize: 1024,
+    });
 
     // ---------------------------------------------------------------------
     // Permissions
     // ---------------------------------------------------------------------
     mediaBucket.grantReadWrite(createUploadUrlFn);
     mediaBucket.grantRead(getMeetingFn);
-    mediaBucket.grantReadWrite(startTranscriptionFn);
-    mediaBucket.grantRead(processTranscriptFn);
+    mediaBucket.grantRead(transcribeFn);
     mediaBucket.grantDelete(deleteMeetingFn);
 
     meetingsTable.grantReadWriteData(createUploadUrlFn);
     meetingsTable.grantReadData(listMeetingsFn);
     meetingsTable.grantReadData(getMeetingFn);
     meetingsTable.grantReadWriteData(deleteMeetingFn);
-    meetingsTable.grantReadWriteData(startTranscriptionFn);
-    meetingsTable.grantReadWriteData(processTranscriptFn);
-
-    // Amazon Transcribe
-    startTranscriptionFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ["transcribe:StartTranscriptionJob"],
-        resources: ["*"],
-      })
-    );
-    processTranscriptFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ["transcribe:GetTranscriptionJob"],
-        resources: ["*"],
-      })
-    );
+    meetingsTable.grantReadWriteData(transcribeFn);
 
     // Amazon Bedrock (Claude) — only granted when summarization is enabled.
     // InvokeModel on foundation models + inference profiles.
     if (BEDROCK_ENABLED) {
-      processTranscriptFn.addToRolePolicy(
+      transcribeFn.addToRolePolicy(
         new iam.PolicyStatement({
           actions: ["bedrock:InvokeModel"],
           resources: [
@@ -230,27 +210,13 @@ export class OttertestStack extends cdk.Stack {
     }
 
     // ---------------------------------------------------------------------
-    // Event wiring
+    // Event wiring: new audio object in S3 → transcribe it with Groq.
     // ---------------------------------------------------------------------
-    // 1. New audio object in S3 → start a Transcribe job.
     mediaBucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,
-      new s3n.LambdaDestination(startTranscriptionFn),
+      new s3n.LambdaDestination(transcribeFn),
       { prefix: "audio/" }
     );
-
-    // 2. Transcribe job finishes → summarize with Bedrock. Amazon Transcribe
-    //    emits "Transcribe Job State Change" events to EventBridge.
-    new events.Rule(this, "TranscribeCompleteRule", {
-      eventPattern: {
-        source: ["aws.transcribe"],
-        detailType: ["Transcribe Job State Change"],
-        detail: {
-          TranscriptionJobStatus: ["COMPLETED", "FAILED"],
-        },
-      },
-      targets: [new targets.LambdaFunction(processTranscriptFn)],
-    });
 
     // ---------------------------------------------------------------------
     // HTTP API + Cognito JWT authorizer

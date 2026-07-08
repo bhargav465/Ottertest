@@ -85,7 +85,7 @@ export function MeetingDetail({
           <span className="spinner" />
           {meeting.status === "UPLOADING" && "Uploading audio…"}
           {meeting.status === "TRANSCRIBING" &&
-            "Transcribing your meeting with Amazon Transcribe…"}
+            "Transcribing your meeting…"}
           {meeting.status === "SUMMARIZING" &&
             "Summarizing with Amazon Bedrock…"}
         </div>
