@@ -26,6 +26,7 @@ export interface MeetingListItem {
   meetingId: string;
   title: string;
   status: MeetingStatus;
+  folder?: string;
   createdAt: string;
   updatedAt: string;
   durationSeconds?: number;
@@ -74,11 +75,24 @@ export function createUpload(input: {
   title?: string;
   contentType: string;
   durationSeconds?: number;
+  folder?: string;
 }): Promise<UploadTicket> {
   return request<UploadTicket>("/uploads", {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+/** Update a meeting's folder and/or title. `folder: ""` unfiles it. */
+export async function updateMeeting(
+  meetingId: string,
+  input: { folder?: string; title?: string }
+): Promise<Meeting> {
+  const data = await request<{ meeting: Meeting }>(`/meetings/${meetingId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+  return data.meeting;
 }
 
 /**

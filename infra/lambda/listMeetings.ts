@@ -21,6 +21,7 @@ export async function handler(
       meetingId: m.meetingId,
       title: m.title,
       status: m.status,
+      folder: m.folder,
       createdAt: m.createdAt,
       updatedAt: m.updatedAt,
       durationSeconds: m.durationSeconds,

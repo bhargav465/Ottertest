@@ -42,7 +42,13 @@ function fmt(seconds: number): string {
 
 type State = "idle" | "recording" | "paused" | "uploading";
 
-export function Recorder({ onUploaded }: { onUploaded: () => void }) {
+export function Recorder({
+  onUploaded,
+  folder,
+}: {
+  onUploaded: () => void;
+  folder?: string | null;
+}) {
   const [state, setState] = useState<State>("idle");
   const [elapsed, setElapsed] = useState(0);
   const [title, setTitle] = useState("");
@@ -208,6 +214,7 @@ export function Recorder({ onUploaded }: { onUploaded: () => void }) {
         title: title.trim() || undefined,
         contentType,
         durationSeconds: duration,
+        folder: folder || undefined,
       });
       await uploadAudio(ticket, blob);
       setTitle("");
@@ -259,6 +266,12 @@ export function Recorder({ onUploaded }: { onUploaded: () => void }) {
             <span className="muted small"> — record remote participants too</span>
           </span>
         </label>
+      )}
+
+      {idle && folder && (
+        <p className="muted small folder-hint">
+          📁 Saves to <strong>{folder}</strong>
+        </p>
       )}
 
       <div className={`timer ${state === "recording" ? "live" : ""}`}>

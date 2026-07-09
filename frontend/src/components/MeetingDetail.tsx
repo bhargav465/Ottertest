@@ -1,21 +1,31 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   getMeeting,
   deleteMeeting,
+  updateMeeting,
   type Meeting,
 } from "../lib/api";
 
+const NEW_FOLDER = "__new__";
+
 export function MeetingDetail({
   meetingId,
+  folders,
+  onUpdated,
   onDeleted,
 }: {
   meetingId: string;
+  folders: string[];
+  onUpdated: () => void;
   onDeleted: () => void;
 }) {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"summary" | "transcript">("summary");
+  const [folderSaving, setFolderSaving] = useState(false);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolder, setNewFolder] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -42,6 +52,29 @@ export function MeetingDetail({
     const id = window.setInterval(load, 5000);
     return () => clearInterval(id);
   }, [meeting, load]);
+
+  // Existing folders plus this meeting's own (in case it's brand new).
+  const folderOptions = useMemo(() => {
+    const set = new Set(folders);
+    if (meeting?.folder) set.add(meeting.folder);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [folders, meeting?.folder]);
+
+  const applyFolder = async (folder: string) => {
+    setFolderSaving(true);
+    setError(null);
+    try {
+      const updated = await updateMeeting(meetingId, { folder });
+      setMeeting(updated);
+      setCreatingFolder(false);
+      setNewFolder("");
+      onUpdated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update folder");
+    } finally {
+      setFolderSaving(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!confirm("Delete this meeting and its recording? This cannot be undone."))
@@ -78,6 +111,68 @@ export function MeetingDetail({
         <button className="btn danger ghost" onClick={handleDelete}>
           Delete
         </button>
+      </div>
+
+      <div className="folder-row">
+        <span className="folder-label">📁 Folder</span>
+        {creatingFolder ? (
+          <span className="folder-new">
+            <input
+              className="folder-input"
+              autoFocus
+              placeholder="New folder name"
+              value={newFolder}
+              maxLength={60}
+              disabled={folderSaving}
+              onChange={(e) => setNewFolder(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newFolder.trim())
+                  applyFolder(newFolder.trim());
+                if (e.key === "Escape") {
+                  setCreatingFolder(false);
+                  setNewFolder("");
+                }
+              }}
+            />
+            <button
+              className="btn primary btn-sm"
+              disabled={!newFolder.trim() || folderSaving}
+              onClick={() => applyFolder(newFolder.trim())}
+            >
+              Save
+            </button>
+            <button
+              className="btn ghost btn-sm"
+              disabled={folderSaving}
+              onClick={() => {
+                setCreatingFolder(false);
+                setNewFolder("");
+              }}
+            >
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <select
+            className="folder-select"
+            value={meeting.folder ?? ""}
+            disabled={folderSaving}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === NEW_FOLDER) setCreatingFolder(true);
+              else applyFolder(v);
+            }}
+          >
+            <option value="">Unfiled</option>
+            {folderOptions.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+            <option value={NEW_FOLDER}>＋ New folder…</option>
+          </select>
+        )}
+        {folderSaving && <span className="spinner" />}
       </div>
 
       {processing && (

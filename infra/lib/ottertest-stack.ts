@@ -158,6 +158,7 @@ export class OttertestStack extends cdk.Stack {
     const createUploadUrlFn = makeFn("CreateUploadUrlFn", "createUploadUrl.ts");
     const listMeetingsFn = makeFn("ListMeetingsFn", "listMeetings.ts");
     const getMeetingFn = makeFn("GetMeetingFn", "getMeeting.ts");
+    const updateMeetingFn = makeFn("UpdateMeetingFn", "updateMeeting.ts");
     const deleteMeetingFn = makeFn("DeleteMeetingFn", "deleteMeeting.ts");
 
     // -- Async pipeline handler --------------------------------------------
@@ -180,6 +181,7 @@ export class OttertestStack extends cdk.Stack {
     meetingsTable.grantReadWriteData(createUploadUrlFn);
     meetingsTable.grantReadData(listMeetingsFn);
     meetingsTable.grantReadData(getMeetingFn);
+    meetingsTable.grantReadWriteData(updateMeetingFn);
     meetingsTable.grantReadWriteData(deleteMeetingFn);
     meetingsTable.grantReadWriteData(transcribeFn);
 
@@ -210,6 +212,7 @@ export class OttertestStack extends cdk.Stack {
         allowMethods: [
           apigw.CorsHttpMethod.GET,
           apigw.CorsHttpMethod.POST,
+          apigw.CorsHttpMethod.PATCH,
           apigw.CorsHttpMethod.DELETE,
           apigw.CorsHttpMethod.OPTIONS,
         ],
@@ -237,6 +240,7 @@ export class OttertestStack extends cdk.Stack {
     addRoute(apigw.HttpMethod.POST, "/uploads", createUploadUrlFn);
     addRoute(apigw.HttpMethod.GET, "/meetings", listMeetingsFn);
     addRoute(apigw.HttpMethod.GET, "/meetings/{meetingId}", getMeetingFn);
+    addRoute(apigw.HttpMethod.PATCH, "/meetings/{meetingId}", updateMeetingFn);
     addRoute(apigw.HttpMethod.DELETE, "/meetings/{meetingId}", deleteMeetingFn);
 
     // ---------------------------------------------------------------------

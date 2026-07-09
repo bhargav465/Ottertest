@@ -691,6 +691,106 @@ button {
   font-size: 0.8rem;
 }
 
+/* Small buttons (folder picker) */
+.btn.btn-sm {
+  padding: 0.4rem 0.65rem;
+  font-size: 0.82rem;
+}
+
+/* Recorder folder hint */
+.folder-hint {
+  text-align: center;
+  margin: 0.2rem 0 0.6rem;
+}
+.folder-hint strong {
+  color: var(--text);
+}
+
+/* Folder filter chips (sidebar) */
+.folder-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.7rem 0 0.4rem;
+}
+.chip {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+.chip:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* Folder tag on list rows */
+.folder-tag {
+  margin-top: 0.4rem;
+  font-size: 0.74rem;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  display: inline-block;
+}
+
+/* Folder picker (detail) */
+.folder-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1.2rem;
+}
+.folder-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+.folder-select,
+.folder-input {
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.6rem;
+  font-size: 0.88rem;
+  font-family: inherit;
+}
+.folder-select {
+  cursor: pointer;
+  min-width: 160px;
+}
+.folder-select:focus,
+.folder-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.folder-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+/* Back button: desktop keeps the two-pane view, so it's hidden there. */
+.mobile-back {
+  display: none;
+  margin-bottom: 1rem;
+}
+
 @media (max-width: 820px) {
   .layout {
     grid-template-columns: 1fr;
@@ -707,5 +807,20 @@ button {
   }
   .user-menu .muted {
     display: none;
+  }
+
+  /* On phones, show EITHER the list or the open meeting — never both stacked,
+     which buried the transcript far below the fold. */
+  .layout .content {
+    display: none;
+  }
+  .layout.has-selection .content {
+    display: block;
+  }
+  .layout.has-selection .sidebar {
+    display: none;
+  }
+  .mobile-back {
+    display: inline-flex;
   }
 }
