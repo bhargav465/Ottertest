@@ -1,0 +1,89 @@
+name: Diag diarization
+
+# Temporary diagnostic. Runs on push to this branch. Pulls the most recent
+# recordings from S3 and runs them through Deepgram with several configs to see
+# which one separates speakers, and whether the stored audio matches the speech.
+on:
+  push:
+    branches: [diag/diarization]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: ottertest-diag
+
+      - name: Locate media bucket
+        id: b
+        run: |
+          BUCKET=$(aws cloudformation describe-stacks --stack-name OttertestStack \
+            --query "Stacks[0].Outputs[?OutputKey=='MediaBucketName'].OutputValue" \
+            --output text)
+          echo "bucket=$BUCKET" >> "$GITHUB_OUTPUT"
+          echo "Media bucket: $BUCKET"
+
+      - name: Download recent recordings
+        run: |
+          BUCKET="${{ steps.b.outputs.bucket }}"
+          mkdir -p clips
+          aws s3 ls "s3://$BUCKET/audio/" --recursive | sort | tail -4 \
+            | awk '{print $4}' > keys.txt
+          echo "Recent audio keys:"; cat keys.txt
+          i=0
+          while read -r key; do
+            [ -z "$key" ] && continue
+            ext="${key##*.}"
+            aws s3 cp "s3://$BUCKET/$key" "clips/clip_$i.$ext" || true
+            i=$((i+1))
+          done < keys.txt
+          ls -la clips
+
+      - name: Test Deepgram configs on each clip
+        env:
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+        run: |
+          for f in clips/*; do
+            [ -e "$f" ] || continue
+            echo "==================== $f ($(stat -c%s "$f") bytes) ===================="
+            ext="${f##*.}"
+            case "$ext" in
+              webm) ct="audio/webm";; mp4|m4a) ct="audio/mp4";;
+              ogg) ct="audio/ogg";; wav) ct="audio/wav";;
+              mp3) ct="audio/mpeg";; *) ct="audio/webm";; esac
+            for cfg in \
+              "model=nova-3&language=multi&diarize=true&smart_format=true&punctuate=true" \
+              "model=nova-3&language=en&diarize=true&smart_format=true&punctuate=true" \
+              "model=nova-2&language=en&diarize=true&smart_format=true&punctuate=true" \
+              "model=nova-3&detect_language=true&diarize=true&smart_format=true&punctuate=true" \
+            ; do
+              echo "----- CONFIG: $cfg -----"
+              curl -s -X POST "https://api.deepgram.com/v1/listen?$cfg" \
+                -H "Authorization: Token $DEEPGRAM_API_KEY" \
+                -H "Content-Type: $ct" \
+                --data-binary "@$f" \
+              | python3 -c '
+import sys,json
+raw=sys.stdin.read()
+try:
+  d=json.loads(raw)
+except Exception:
+  print("  non-JSON:", raw[:200]); sys.exit()
+ch=(((d.get("results") or {}).get("channels") or [{}]))[0]
+alt=(ch.get("alternatives") or [{}])[0]
+words=alt.get("words") or []
+spk=sorted({w.get("speaker") for w in words if w.get("speaker") is not None})
+print("  distinct speakers:", spk, "| word count:", len(words),
+      "| detected_language:", ch.get("detected_language"))
+print("  transcript:", (alt.get("transcript") or "")[:200])
+'
+            done
+          done
