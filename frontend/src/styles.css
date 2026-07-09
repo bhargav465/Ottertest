@@ -686,6 +686,11 @@ button {
   border: 1px solid rgba(109, 139, 255, 0.5);
   color: #c3d0ff;
 }
+.alert.warn {
+  background: rgba(245, 183, 78, 0.1);
+  border: 1px solid rgba(245, 183, 78, 0.5);
+  color: #f3cf94;
+}
 .alert.small {
   padding: 0.5rem 0.65rem;
   font-size: 0.8rem;
