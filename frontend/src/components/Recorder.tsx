@@ -254,7 +254,7 @@ export function Recorder({
       />
 
       {systemAudioSupported() && (
-        <label className="capture-toggle" title="Great for Zoom/Meet/Teams calls">
+        <label className="capture-toggle" title="Only for live Zoom/Meet/Teams calls">
           <input
             type="checkbox"
             checked={captureSystem}
@@ -263,7 +263,12 @@ export function Recorder({
           />
           <span>
             Capture call audio
-            <span className="muted small"> — record remote participants too</span>
+            <span className="muted small">
+              {" "}
+              — only for live video calls. Records a browser tab you pick, so
+              anything playing in it (a video, music) gets recorded instead of
+              your voice.
+            </span>
           </span>
         </label>
       )}
@@ -321,10 +326,12 @@ export function Recorder({
       </div>
 
       {idle && captureSystem && (
-        <p className="muted small capture-hint">
-          When you start, pick the meeting tab/window and enable “Share tab
-          audio”.
-        </p>
+        <div className="alert warn small capture-hint">
+          ⚠️ When you press start, your browser asks which tab/window to share —
+          pick your <strong>live meeting</strong> tab and tick{" "}
+          <strong>“Also share tab audio”</strong>. Whatever plays in that tab is
+          recorded, so close any videos or music first.
+        </div>
       )}
     </div>
   );
