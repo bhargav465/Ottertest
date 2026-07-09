@@ -10,6 +10,8 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [activeFolder, setActiveFolder] = useState<string | null>(null);
+  const [folders, setFolders] = useState<string[]>([]);
 
   useEffect(() => {
     getCurrentUser().then((u) => {
@@ -49,9 +51,10 @@ export function App() {
         </div>
       </header>
 
-      <main className="layout">
+      <main className={`layout ${selectedId ? "has-selection" : ""}`}>
         <aside className="sidebar">
           <Recorder
+            folder={activeFolder}
             onUploaded={() => {
               refresh();
             }}
@@ -60,18 +63,31 @@ export function App() {
             refreshKey={refreshKey}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            activeFolder={activeFolder}
+            onFolderChange={setActiveFolder}
+            onFoldersChange={setFolders}
           />
         </aside>
 
         <section className="content">
           {selectedId ? (
-            <MeetingDetail
-              meetingId={selectedId}
-              onDeleted={() => {
-                setSelectedId(null);
-                refresh();
-              }}
-            />
+            <>
+              <button
+                className="btn ghost mobile-back"
+                onClick={() => setSelectedId(null)}
+              >
+                ← All meetings
+              </button>
+              <MeetingDetail
+                meetingId={selectedId}
+                folders={folders}
+                onUpdated={refresh}
+                onDeleted={() => {
+                  setSelectedId(null);
+                  refresh();
+                }}
+              />
+            </>
           ) : (
             <div className="empty-state">
               <div className="empty-emoji">🎙️</div>

@@ -62,7 +62,8 @@ export async function listMeetings(userId: string): Promise<Meeting[]> {
 export async function updateMeeting(
   userId: string,
   meetingId: string,
-  fields: Partial<Meeting>
+  // `null` for a field means "remove this attribute" (e.g. unfile a meeting).
+  fields: Partial<Record<keyof Meeting, unknown>>
 ): Promise<void> {
   const keys = Object.keys(fields);
   if (keys.length === 0) return;
@@ -70,19 +71,31 @@ export async function updateMeeting(
   const names: Record<string, string> = {};
   const values: Record<string, unknown> = {};
   const sets: string[] = [];
+  const removes: string[] = [];
   keys.forEach((k, i) => {
     names[`#k${i}`] = k;
-    values[`:v${i}`] = (fields as Record<string, unknown>)[k];
-    sets.push(`#k${i} = :v${i}`);
+    const v = (fields as Record<string, unknown>)[k];
+    if (v === null) {
+      removes.push(`#k${i}`);
+    } else {
+      values[`:v${i}`] = v;
+      sets.push(`#k${i} = :v${i}`);
+    }
   });
+
+  const clauses: string[] = [];
+  if (sets.length) clauses.push(`SET ${sets.join(", ")}`);
+  if (removes.length) clauses.push(`REMOVE ${removes.join(", ")}`);
 
   await ddb.send(
     new UpdateCommand({
       TableName: TABLE,
       Key: { userId, meetingId },
-      UpdateExpression: `SET ${sets.join(", ")}`,
+      UpdateExpression: clauses.join(" "),
       ExpressionAttributeNames: names,
-      ExpressionAttributeValues: values,
+      ...(Object.keys(values).length
+        ? { ExpressionAttributeValues: values }
+        : {}),
     })
   );
 }

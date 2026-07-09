@@ -28,6 +28,7 @@ interface CreateUploadBody {
   title?: string;
   contentType?: string;
   durationSeconds?: number;
+  folder?: string;
 }
 
 /**
@@ -58,6 +59,7 @@ export async function handler(
     const now = new Date().toISOString();
 
     const hasTitle = Boolean(body.title?.trim());
+    const folder = body.folder?.trim().slice(0, 60);
     const meeting: Meeting = {
       userId,
       meetingId,
@@ -71,6 +73,7 @@ export async function handler(
       updatedAt: now,
       audioKey,
       durationSeconds: body.durationSeconds,
+      ...(folder ? { folder } : {}),
     };
     await putMeeting(meeting);
 

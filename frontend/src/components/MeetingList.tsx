@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { listMeetings, type MeetingListItem, type MeetingStatus } from "../lib/api";
 
 const STATUS_LABEL: Record<MeetingStatus, string> = {
@@ -8,6 +8,9 @@ const STATUS_LABEL: Record<MeetingStatus, string> = {
   DONE: "Ready",
   FAILED: "Failed",
 };
+
+// activeFolder sentinels: null = All folders, "" = Unfiled, else a folder name.
+export const UNFILED = "";
 
 function StatusBadge({ status }: { status: MeetingStatus }) {
   const inProgress =
@@ -26,10 +29,16 @@ export function MeetingList({
   refreshKey,
   selectedId,
   onSelect,
+  activeFolder,
+  onFolderChange,
+  onFoldersChange,
 }: {
   refreshKey: number;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  activeFolder: string | null;
+  onFolderChange: (folder: string | null) => void;
+  onFoldersChange: (folders: string[]) => void;
 }) {
   const [meetings, setMeetings] = useState<MeetingListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +70,32 @@ export function MeetingList({
     return () => clearInterval(id);
   }, [meetings, load]);
 
+  const folders = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of meetings) if (m.folder) set.add(m.folder);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [meetings]);
+
+  const hasUnfiled = useMemo(() => meetings.some((m) => !m.folder), [meetings]);
+
+  // Publish the folder list to the parent (for the detail view's picker).
+  const lastFolders = useRef("");
+  useEffect(() => {
+    const key = folders.join("|");
+    if (key !== lastFolders.current) {
+      lastFolders.current = key;
+      onFoldersChange(folders);
+    }
+  }, [folders, onFoldersChange]);
+
+  const visible = useMemo(() => {
+    if (activeFolder === null) return meetings;
+    if (activeFolder === UNFILED) return meetings.filter((m) => !m.folder);
+    return meetings.filter((m) => m.folder === activeFolder);
+  }, [meetings, activeFolder]);
+
+  const showFolderTags = activeFolder === null;
+
   return (
     <div className="meeting-list">
       <div className="list-header">
@@ -70,14 +105,45 @@ export function MeetingList({
         </button>
       </div>
 
+      {(folders.length > 0 || hasUnfiled) && (
+        <div className="folder-filter">
+          <button
+            className={`chip ${activeFolder === null ? "active" : ""}`}
+            onClick={() => onFolderChange(null)}
+          >
+            All
+          </button>
+          {folders.map((f) => (
+            <button
+              key={f}
+              className={`chip ${activeFolder === f ? "active" : ""}`}
+              onClick={() => onFolderChange(f)}
+            >
+              📁 {f}
+            </button>
+          ))}
+          {hasUnfiled && (
+            <button
+              className={`chip ${activeFolder === UNFILED ? "active" : ""}`}
+              onClick={() => onFolderChange(UNFILED)}
+            >
+              Unfiled
+            </button>
+          )}
+        </div>
+      )}
+
       {loading && <div className="muted small">Loading…</div>}
       {error && <div className="alert error small">{error}</div>}
       {!loading && meetings.length === 0 && (
         <div className="muted small">No meetings yet — record your first one.</div>
       )}
+      {!loading && meetings.length > 0 && visible.length === 0 && (
+        <div className="muted small">No meetings in this folder yet.</div>
+      )}
 
       <ul>
-        {meetings.map((m) => (
+        {visible.map((m) => (
           <li
             key={m.meetingId}
             className={m.meetingId === selectedId ? "selected" : ""}
@@ -95,6 +161,9 @@ export function MeetingList({
                 </span>
               )}
             </div>
+            {showFolderTags && m.folder && (
+              <div className="folder-tag">📁 {m.folder}</div>
+            )}
           </li>
         ))}
       </ul>

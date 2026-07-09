@@ -35,6 +35,8 @@ export interface Meeting {
   title: string;
   /** True until the owner has renamed the meeting; lets us auto-title it. */
   autoTitle?: boolean;
+  /** Optional user-defined folder this meeting is filed under. */
+  folder?: string;
   status: MeetingStatus;
   createdAt: string;
   updatedAt: string;
