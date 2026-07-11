@@ -37,6 +37,8 @@ export interface Meeting {
   autoTitle?: boolean;
   /** Optional user-defined folder this meeting is filed under. */
   folder?: string;
+  /** Custom display names for diarized speakers, keyed by label ("Speaker 1"). */
+  speakerNames?: Record<string, string>;
   status: MeetingStatus;
   createdAt: string;
   updatedAt: string;

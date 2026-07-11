@@ -18,10 +18,29 @@ interface UpdateBody {
   folder?: string | null;
   /** Optional rename. */
   title?: string;
+  /** Map of speaker label → custom name, e.g. { "Speaker 1": "Matt" }. */
+  speakerNames?: Record<string, string> | null;
 }
 
 const MAX_FOLDER = 60;
 const MAX_TITLE = 200;
+const MAX_SPEAKER_NAME = 60;
+const MAX_SPEAKERS = 40;
+
+/** Keep only sane "Speaker N" → non-empty-name entries; trims + caps sizes. */
+function cleanSpeakerNames(
+  input: Record<string, string>
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [label, name] of Object.entries(input)) {
+    if (Object.keys(out).length >= MAX_SPEAKERS) break;
+    if (!/^Speaker \d+$/.test(label)) continue;
+    if (typeof name !== "string") continue;
+    const clean = name.trim().slice(0, MAX_SPEAKER_NAME);
+    if (clean) out[label] = clean;
+  }
+  return out;
+}
 
 /**
  * PATCH /meetings/{meetingId}
@@ -53,6 +72,14 @@ export async function handler(
         fields.title = title;
         fields.autoTitle = false;
       }
+    }
+
+    if (body.speakerNames !== undefined) {
+      const cleaned = body.speakerNames
+        ? cleanSpeakerNames(body.speakerNames)
+        : {};
+      // Empty map → remove the attribute entirely (back to plain Speaker N).
+      fields.speakerNames = Object.keys(cleaned).length ? cleaned : null;
     }
 
     if (Object.keys(fields).length === 0) {

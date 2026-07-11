@@ -26,6 +26,8 @@ export function MeetingDetail({
   const [folderSaving, setFolderSaving] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolder, setNewFolder] = useState("");
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [savingSpeakers, setSavingSpeakers] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -59,6 +61,60 @@ export function MeetingDetail({
     if (meeting?.folder) set.add(meeting.folder);
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [folders, meeting?.folder]);
+
+  // Distinct "Speaker N" labels present in the transcript, in order.
+  const speakerLabels = useMemo(() => {
+    const set = new Set<string>();
+    const re = /^(Speaker \d+):/gm;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(meeting?.transcript ?? "")) !== null) set.add(m[1]);
+    return Array.from(set).sort(
+      (a, b) => parseInt(a.slice(8), 10) - parseInt(b.slice(8), 10)
+    );
+  }, [meeting?.transcript]);
+
+  // Seed the editable name map from the saved names whenever they change.
+  const savedNamesKey = JSON.stringify(meeting?.speakerNames ?? {});
+  useEffect(() => {
+    setNames(meeting?.speakerNames ?? {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetingId, savedNamesKey]);
+
+  const saveSpeakers = async () => {
+    setSavingSpeakers(true);
+    setError(null);
+    try {
+      const updated = await updateMeeting(meetingId, { speakerNames: names });
+      setMeeting(updated);
+      onUpdated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save speaker names");
+    } finally {
+      setSavingSpeakers(false);
+    }
+  };
+
+  // Transcript rendered with saved speaker names substituted in.
+  const renderedTranscript = useMemo(() => {
+    const t = meeting?.transcript ?? "";
+    if (!t.trim()) return null;
+    const map = meeting?.speakerNames ?? {};
+    return t.split("\n").map((line, i) => {
+      const m = line.match(/^(Speaker \d+): ?(.*)$/);
+      if (m) {
+        return (
+          <p key={i} className="tline">
+            <span className="spk">{map[m[1]] || m[1]}:</span> {m[2]}
+          </p>
+        );
+      }
+      return (
+        <p key={i} className="tline">
+          {line}
+        </p>
+      );
+    });
+  }, [meeting?.transcript, meeting?.speakerNames]);
 
   const applyFolder = async (folder: string) => {
     setFolderSaving(true);
@@ -276,9 +332,52 @@ export function MeetingDetail({
           )}
 
           {tab === "transcript" && (
-            <pre className="transcript">
-              {meeting.transcript || "No transcript available."}
-            </pre>
+            <>
+              {speakerLabels.length > 0 && (
+                <div className="speaker-editor">
+                  <div className="speaker-editor-head">
+                    <span>🏷️ Name the speakers</span>
+                    {savingSpeakers ? (
+                      <span className="spinner" />
+                    ) : (
+                      <button
+                        className="btn primary btn-sm"
+                        onClick={saveSpeakers}
+                      >
+                        Save names
+                      </button>
+                    )}
+                  </div>
+                  <div className="speaker-grid">
+                    {speakerLabels.map((label) => (
+                      <label key={label} className="speaker-item">
+                        <span className="muted small">{label}</span>
+                        <input
+                          className="folder-input"
+                          placeholder={label}
+                          maxLength={60}
+                          value={names[label] ?? ""}
+                          disabled={savingSpeakers}
+                          onChange={(e) =>
+                            setNames((n) => ({ ...n, [label]: e.target.value }))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveSpeakers();
+                          }}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <p className="muted small speaker-hint">
+                    Leave blank to keep “Speaker 1”, “Speaker 2”, …
+                  </p>
+                </div>
+              )}
+
+              <div className="transcript">
+                {renderedTranscript || "No transcript available."}
+              </div>
+            </>
           )}
         </>
       )}

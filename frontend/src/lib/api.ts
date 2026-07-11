@@ -39,6 +39,7 @@ export interface Meeting extends MeetingListItem {
   audioKey: string;
   transcript?: string;
   summary?: MeetingSummary;
+  speakerNames?: Record<string, string>;
   error?: string;
 }
 
@@ -83,10 +84,14 @@ export function createUpload(input: {
   });
 }
 
-/** Update a meeting's folder and/or title. `folder: ""` unfiles it. */
+/** Update a meeting's folder, title, and/or speaker names. `folder: ""` unfiles. */
 export async function updateMeeting(
   meetingId: string,
-  input: { folder?: string; title?: string }
+  input: {
+    folder?: string;
+    title?: string;
+    speakerNames?: Record<string, string>;
+  }
 ): Promise<Meeting> {
   const data = await request<{ meeting: Meeting }>(`/meetings/${meetingId}`, {
     method: "PATCH",
