@@ -3,7 +3,9 @@ name: Build Android app (TWA)
 # Manually build a Trusted Web Activity wrapper of the PWA into an Android App
 # Bundle (.aab) you can upload to the Play Console. Run from Actions →
 # "Build Android app (TWA)" → Run workflow. The .aab/.apk are attached as build
-# artifacts. See docs/PLAY_STORE.md for the full submission walkthrough.
+# artifacts, and the .apk is also published to
+# https://<your-cloudfront>/downloads/ottertest.apk for easy phone install.
+# See docs/PLAY_STORE.md for the full submission walkthrough.
 #
 # Signing: add repo secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
 # ANDROID_KEY_PASSWORD to sign with your real upload key. Without them, a
@@ -20,6 +22,7 @@ on:
         default: "1"
 
 permissions:
+  id-token: write # to publish the APK to your S3 site via OIDC
   contents: read
 
 jobs:
@@ -110,3 +113,37 @@ jobs:
             android/app-release-signed.apk
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ vars.AWS_DEPLOY_ROLE_ARN != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: ottertest-apk
+
+      - name: Publish APK to your site (/downloads) for easy install
+        if: ${{ vars.AWS_DEPLOY_ROLE_ARN != '' }}
+        working-directory: android
+        run: |
+          APK=$(ls app-release-signed.apk 2>/dev/null || ls *.apk 2>/dev/null | head -1)
+          if [ -z "$APK" ]; then echo "No APK found — skipping."; exit 0; fi
+          SITE_BUCKET=$(aws cloudformation describe-stacks --stack-name OttertestStack \
+            --query "Stacks[0].Outputs[?OutputKey=='SiteBucketName'].OutputValue" --output text)
+          DIST_ID=$(aws cloudformation describe-stacks --stack-name OttertestStack \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" --output text)
+          SITE_URL=$(aws cloudformation describe-stacks --stack-name OttertestStack \
+            --query "Stacks[0].Outputs[?OutputKey=='SiteUrl'].OutputValue" --output text)
+          aws s3 cp "$APK" "s3://$SITE_BUCKET/downloads/ottertest.apk" \
+            --content-type application/vnd.android.package-archive --cache-control no-cache
+          aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/downloads/*" >/dev/null
+          echo "APK published: $SITE_URL/downloads/ottertest.apk"
+          {
+            echo "### 📱 Install on your phone"
+            echo ""
+            echo "Open this on your Android device and install (enable \"install unknown apps\" if asked):"
+            echo ""
+            echo "**$SITE_URL/downloads/ottertest.apk**"
+            echo ""
+            echo "_Preview build (test key) — for sideloading only, not Play upload._"
+          } >> "$GITHUB_STEP_SUMMARY"
