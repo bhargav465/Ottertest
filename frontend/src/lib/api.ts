@@ -152,3 +152,13 @@ export async function getAudioUrl(meetingId: string): Promise<string> {
 export function deleteMeeting(meetingId: string): Promise<void> {
   return request<void>(`/meetings/${meetingId}`, { method: "DELETE" });
 }
+
+/** Download all of the account's data (full meetings) as an object. */
+export function exportAccount(): Promise<unknown> {
+  return request<unknown>("/account/export");
+}
+
+/** Delete all of the account's meetings + audio (server-side). */
+export function deleteAccountData(): Promise<void> {
+  return request<void>("/account", { method: "DELETE" });
+}

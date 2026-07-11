@@ -198,6 +198,61 @@ button {
   align-items: center;
   gap: 0.8rem;
 }
+
+/* Account dropdown */
+.account-menu {
+  position: relative;
+}
+.account-trigger .muted {
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: bottom;
+}
+.account-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+.account-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 31;
+  min-width: 200px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+}
+.account-item {
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.9rem;
+  padding: 0.55rem 0.6rem;
+  border-radius: 8px;
+}
+.account-item:hover:not(:disabled) {
+  background: var(--panel-3);
+}
+.account-item:disabled {
+  opacity: 0.6;
+}
+.account-item.danger {
+  color: var(--danger);
+}
+.account-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 0.3rem 0;
+}
 .user-menu .muted {
   font-size: 0.88rem;
   max-width: 42vw;

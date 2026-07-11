@@ -4,6 +4,7 @@ import { AuthPanel } from "./components/AuthPanel";
 import { Recorder } from "./components/Recorder";
 import { MeetingList } from "./components/MeetingList";
 import { MeetingDetail } from "./components/MeetingDetail";
+import { AccountMenu } from "./components/AccountMenu";
 
 export function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -44,10 +45,7 @@ export function App() {
           <span>Ottertest</span>
         </div>
         <div className="user-menu">
-          <span className="muted">{user.email}</span>
-          <button className="btn ghost" onClick={handleSignOut}>
-            Sign out
-          </button>
+          <AccountMenu user={user} onSignOut={handleSignOut} />
         </div>
       </header>
 
