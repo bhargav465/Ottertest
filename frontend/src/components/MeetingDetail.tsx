@@ -3,8 +3,10 @@ import {
   getMeeting,
   deleteMeeting,
   updateMeeting,
+  getAudioUrl,
   type Meeting,
 } from "../lib/api";
+import { meetingToMarkdown, downloadText, slugify } from "../lib/exportMeeting";
 
 const NEW_FOLDER = "__new__";
 
@@ -28,6 +30,8 @@ export function MeetingDetail({
   const [newFolder, setNewFolder] = useState("");
   const [names, setNames] = useState<Record<string, string>>({});
   const [savingSpeakers, setSavingSpeakers] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -132,6 +136,55 @@ export function MeetingDetail({
     }
   };
 
+  // Fetch a playback URL once the recording exists (i.e. past the upload step).
+  useEffect(() => {
+    setAudioUrl(null);
+    if (!meeting || meeting.status === "UPLOADING") return;
+    let cancelled = false;
+    getAudioUrl(meetingId)
+      .then((url) => {
+        if (!cancelled) setAudioUrl(url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetingId, meeting?.status]);
+
+  const handleCopy = async () => {
+    if (!meeting) return;
+    try {
+      await navigator.clipboard.writeText(meetingToMarkdown(meeting));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setError("Couldn't copy to clipboard.");
+    }
+  };
+
+  const handleDownload = () => {
+    if (!meeting) return;
+    downloadText(`${slugify(meeting.title)}.md`, meetingToMarkdown(meeting));
+  };
+
+  const handleShare = async () => {
+    if (!meeting) return;
+    const text = meetingToMarkdown(meeting);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: meeting.title, text });
+      } catch {
+        /* user dismissed the share sheet */
+      }
+    } else {
+      handleCopy();
+    }
+  };
+
+  const canShare =
+    typeof navigator !== "undefined" && typeof navigator.share === "function";
+
   const handleDelete = async () => {
     if (!confirm("Delete this meeting and its recording? This cannot be undone."))
       return;
@@ -164,10 +217,29 @@ export function MeetingDetail({
               : ""}
           </p>
         </div>
-        <button className="btn danger ghost" onClick={handleDelete}>
-          Delete
-        </button>
+        <div className="detail-actions">
+          <button className="btn ghost btn-sm" onClick={handleCopy}>
+            {copied ? "Copied ✓" : "Copy"}
+          </button>
+          <button className="btn ghost btn-sm" onClick={handleDownload}>
+            Download
+          </button>
+          {canShare && (
+            <button className="btn ghost btn-sm" onClick={handleShare}>
+              Share
+            </button>
+          )}
+          <button className="btn danger ghost btn-sm" onClick={handleDelete}>
+            Delete
+          </button>
+        </div>
       </div>
+
+      {audioUrl && (
+        <audio className="audio-player" controls preload="none" src={audioUrl}>
+          Your browser can't play this recording.
+        </audio>
+      )}
 
       <div className="folder-row">
         <span className="folder-label">📁 Folder</span>
