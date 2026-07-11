@@ -173,6 +173,11 @@ export function AuthPanel({
             )}
           </p>
         )}
+        <p className="switch muted small">
+          <a className="privacy-link" href="/privacy.html" target="_blank" rel="noopener">
+            Privacy Policy
+          </a>
+        </p>
       </div>
     </div>
   );
