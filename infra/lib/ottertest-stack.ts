@@ -208,62 +208,9 @@ export class OttertestStack extends cdk.Stack {
     );
 
     // ---------------------------------------------------------------------
-    // HTTP API + Cognito JWT authorizer
-    // ---------------------------------------------------------------------
-    const authorizer = new apigwAuth.HttpUserPoolAuthorizer(
-      "JwtAuthorizer",
-      userPool,
-      { userPoolClients: [userPoolClient] }
-    );
-
-    const httpApi = new apigw.HttpApi(this, "HttpApi", {
-      apiName: "ottertest-api",
-      corsPreflight: {
-        allowHeaders: ["authorization", "content-type"],
-        allowMethods: [
-          apigw.CorsHttpMethod.GET,
-          apigw.CorsHttpMethod.POST,
-          apigw.CorsHttpMethod.PATCH,
-          apigw.CorsHttpMethod.DELETE,
-          apigw.CorsHttpMethod.OPTIONS,
-        ],
-        allowOrigins: ["*"], // tighten to your frontend origin in production
-        maxAge: cdk.Duration.days(1),
-      },
-    });
-
-    const addRoute = (
-      method: apigw.HttpMethod,
-      route: string,
-      fn: lambda.IFunction
-    ) => {
-      httpApi.addRoutes({
-        path: route,
-        methods: [method],
-        integration: new apigwInt.HttpLambdaIntegration(
-          `${fn.node.id}Int`,
-          fn
-        ),
-        authorizer,
-      });
-    };
-
-    addRoute(apigw.HttpMethod.POST, "/uploads", createUploadUrlFn);
-    addRoute(apigw.HttpMethod.GET, "/meetings", listMeetingsFn);
-    addRoute(apigw.HttpMethod.GET, "/meetings/{meetingId}", getMeetingFn);
-    addRoute(
-      apigw.HttpMethod.GET,
-      "/meetings/{meetingId}/audio",
-      getAudioUrlFn
-    );
-    addRoute(apigw.HttpMethod.PATCH, "/meetings/{meetingId}", updateMeetingFn);
-    addRoute(apigw.HttpMethod.DELETE, "/meetings/{meetingId}", deleteMeetingFn);
-    addRoute(apigw.HttpMethod.GET, "/account/export", exportAccountFn);
-    addRoute(apigw.HttpMethod.DELETE, "/account", deleteAccountFn);
-
-    // ---------------------------------------------------------------------
     // Frontend hosting: private S3 bucket behind CloudFront (HTTPS + CDN).
     // The deploy workflow builds the site and syncs it into SiteBucket.
+    // Defined before the API so its domain can lock the API's CORS origins.
     // ---------------------------------------------------------------------
     const siteBucket = new s3.Bucket(this, "SiteBucket", {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -300,6 +247,67 @@ export class OttertestStack extends cdk.Stack {
         },
       ],
     });
+
+    const siteOrigin = `https://${distribution.distributionDomainName}`;
+
+    // ---------------------------------------------------------------------
+    // HTTP API + Cognito JWT authorizer
+    // ---------------------------------------------------------------------
+    const authorizer = new apigwAuth.HttpUserPoolAuthorizer(
+      "JwtAuthorizer",
+      userPool,
+      { userPoolClients: [userPoolClient] }
+    );
+
+    const httpApi = new apigw.HttpApi(this, "HttpApi", {
+      apiName: "ottertest-api",
+      corsPreflight: {
+        allowHeaders: ["authorization", "content-type"],
+        allowMethods: [
+          apigw.CorsHttpMethod.GET,
+          apigw.CorsHttpMethod.POST,
+          apigw.CorsHttpMethod.PATCH,
+          apigw.CorsHttpMethod.DELETE,
+          apigw.CorsHttpMethod.OPTIONS,
+        ],
+        // Locked to the CloudFront site + local dev ports (not "*").
+        allowOrigins: [
+          siteOrigin,
+          "http://localhost:5173",
+          "http://localhost:4173",
+        ],
+        maxAge: cdk.Duration.days(1),
+      },
+    });
+
+    const addRoute = (
+      method: apigw.HttpMethod,
+      route: string,
+      fn: lambda.IFunction
+    ) => {
+      httpApi.addRoutes({
+        path: route,
+        methods: [method],
+        integration: new apigwInt.HttpLambdaIntegration(
+          `${fn.node.id}Int`,
+          fn
+        ),
+        authorizer,
+      });
+    };
+
+    addRoute(apigw.HttpMethod.POST, "/uploads", createUploadUrlFn);
+    addRoute(apigw.HttpMethod.GET, "/meetings", listMeetingsFn);
+    addRoute(apigw.HttpMethod.GET, "/meetings/{meetingId}", getMeetingFn);
+    addRoute(
+      apigw.HttpMethod.GET,
+      "/meetings/{meetingId}/audio",
+      getAudioUrlFn
+    );
+    addRoute(apigw.HttpMethod.PATCH, "/meetings/{meetingId}", updateMeetingFn);
+    addRoute(apigw.HttpMethod.DELETE, "/meetings/{meetingId}", deleteMeetingFn);
+    addRoute(apigw.HttpMethod.GET, "/account/export", exportAccountFn);
+    addRoute(apigw.HttpMethod.DELETE, "/account", deleteAccountFn);
 
     // ---------------------------------------------------------------------
     // Outputs (paste these into frontend/.env)
