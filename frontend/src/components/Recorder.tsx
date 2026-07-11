@@ -63,6 +63,7 @@ export function Recorder({
   const displayStreamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const timerRef = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mimeRef = useRef<string>("audio/webm");
   // Kept in sync with `elapsed` so the async onstop handler reads a fresh value.
   const elapsedRef = useRef(0);
@@ -197,23 +198,20 @@ export function Recorder({
     // handleStop runs asynchronously via onstop.
   };
 
-  const handleStop = async () => {
-    teardownStreams();
-    const duration = elapsedRef.current;
-    const blob = new Blob(chunksRef.current, { type: mimeRef.current });
-    if (blob.size === 0) {
-      setState("idle");
-      setError("Nothing was recorded.");
-      return;
-    }
+  /** Shared upload path for both live recordings and imported files. */
+  const uploadRecording = async (
+    blob: Blob,
+    contentType: string,
+    durationSeconds: number | undefined,
+    titleOverride?: string
+  ) => {
     setState("uploading");
-    const contentType = mimeRef.current.split(";")[0];
     let ticket;
     try {
       ticket = await createUpload({
-        title: title.trim() || undefined,
+        title: (titleOverride ?? title).trim() || undefined,
         contentType,
-        durationSeconds: duration,
+        durationSeconds,
         folder: folder || undefined,
       });
       await uploadAudio(ticket, blob);
@@ -234,6 +232,51 @@ export function Recorder({
       );
       setState("idle");
     }
+  };
+
+  const handleStop = async () => {
+    teardownStreams();
+    const duration = elapsedRef.current;
+    const blob = new Blob(chunksRef.current, { type: mimeRef.current });
+    if (blob.size === 0) {
+      setState("idle");
+      setError("Nothing was recorded.");
+      return;
+    }
+    await uploadRecording(blob, mimeRef.current.split(";")[0], duration);
+  };
+
+  /** Read an audio file's duration (best-effort) so the list shows a length. */
+  const readDuration = (file: File): Promise<number | undefined> =>
+    new Promise((resolve) => {
+      try {
+        const el = document.createElement("audio");
+        el.preload = "metadata";
+        el.onloadedmetadata = () => {
+          const d = Number.isFinite(el.duration) ? Math.round(el.duration) : undefined;
+          URL.revokeObjectURL(el.src);
+          resolve(d);
+        };
+        el.onerror = () => resolve(undefined);
+        el.src = URL.createObjectURL(file);
+      } catch {
+        resolve(undefined);
+      }
+    });
+
+  const importFile = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    setNote(null);
+    if (!file.type.startsWith("audio/") && !/\.(mp3|m4a|wav|ogg|flac|webm|mp4)$/i.test(file.name)) {
+      setError("Please choose an audio file (mp3, m4a, wav, ogg, flac…).");
+      return;
+    }
+    const contentType = file.type || "audio/mpeg";
+    const duration = await readDuration(file);
+    const effectiveTitle =
+      title.trim() || file.name.replace(/\.[^.]+$/, "");
+    await uploadRecording(file, contentType, duration, effectiveTitle);
   };
 
   const idle = state === "idle";
@@ -298,6 +341,15 @@ export function Recorder({
             ● Start recording
           </button>
         )}
+        {idle && (
+          <button
+            className="btn ghost"
+            onClick={() => fileInputRef.current?.click()}
+            title="Transcribe an existing audio file"
+          >
+            ⬆ Import file
+          </button>
+        )}
         {state === "recording" && (
           <>
             <button className="btn ghost" onClick={pause}>
@@ -324,6 +376,17 @@ export function Recorder({
           </button>
         )}
       </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="audio/*,.m4a,.mp3,.wav,.ogg,.flac,.webm,.mp4"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          importFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
 
       {idle && captureSystem && (
         <div className="alert warn small capture-hint">

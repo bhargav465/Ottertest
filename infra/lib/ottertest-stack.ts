@@ -161,6 +161,10 @@ export class OttertestStack extends cdk.Stack {
     const getAudioUrlFn = makeFn("GetAudioUrlFn", "getAudioUrl.ts");
     const updateMeetingFn = makeFn("UpdateMeetingFn", "updateMeeting.ts");
     const deleteMeetingFn = makeFn("DeleteMeetingFn", "deleteMeeting.ts");
+    const exportAccountFn = makeFn("ExportAccountFn", "exportAccount.ts");
+    const deleteAccountFn = makeFn("DeleteAccountFn", "deleteAccount.ts", {
+      timeout: cdk.Duration.minutes(2),
+    });
 
     // -- Async pipeline handler --------------------------------------------
     // Single Groq-based Lambda: downloads the audio, transcribes it (Whisper),
@@ -179,6 +183,8 @@ export class OttertestStack extends cdk.Stack {
     mediaBucket.grantRead(getAudioUrlFn);
     mediaBucket.grantRead(transcribeFn);
     mediaBucket.grantDelete(deleteMeetingFn);
+    mediaBucket.grantRead(deleteAccountFn);
+    mediaBucket.grantDelete(deleteAccountFn);
 
     meetingsTable.grantReadWriteData(createUploadUrlFn);
     meetingsTable.grantReadData(listMeetingsFn);
@@ -186,6 +192,8 @@ export class OttertestStack extends cdk.Stack {
     meetingsTable.grantReadData(getAudioUrlFn);
     meetingsTable.grantReadWriteData(updateMeetingFn);
     meetingsTable.grantReadWriteData(deleteMeetingFn);
+    meetingsTable.grantReadData(exportAccountFn);
+    meetingsTable.grantReadWriteData(deleteAccountFn);
     meetingsTable.grantReadWriteData(transcribeFn);
 
     // Summaries run via Groq (external HTTPS) — no extra AWS permissions needed.
@@ -250,6 +258,8 @@ export class OttertestStack extends cdk.Stack {
     );
     addRoute(apigw.HttpMethod.PATCH, "/meetings/{meetingId}", updateMeetingFn);
     addRoute(apigw.HttpMethod.DELETE, "/meetings/{meetingId}", deleteMeetingFn);
+    addRoute(apigw.HttpMethod.GET, "/account/export", exportAccountFn);
+    addRoute(apigw.HttpMethod.DELETE, "/account", deleteAccountFn);
 
     // ---------------------------------------------------------------------
     // Frontend hosting: private S3 bucket behind CloudFront (HTTPS + CDN).

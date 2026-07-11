@@ -69,6 +69,21 @@ export function signOut(): void {
   pool.getCurrentUser()?.signOut();
 }
 
+/** Permanently delete the currently signed-in Cognito account. */
+export function deleteCurrentUser(): Promise<void> {
+  const user = pool.getCurrentUser();
+  if (!user) return Promise.reject(new Error("Not signed in"));
+  return new Promise((resolve, reject) => {
+    user.getSession((err: Error | null, session: CognitoUserSession | null) => {
+      if (err || !session || !session.isValid()) {
+        reject(err || new Error("No valid session"));
+        return;
+      }
+      user.deleteUser((delErr) => (delErr ? reject(delErr) : resolve()));
+    });
+  });
+}
+
 /** Resolve the current signed-in user with a fresh (auto-refreshed) id token. */
 export function getCurrentUser(): Promise<AuthUser | null> {
   const user = pool.getCurrentUser();

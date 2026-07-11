@@ -45,13 +45,21 @@ export async function handler(
     const body = parseBody<CreateUploadBody>(event.body);
 
     const contentType = body.contentType ?? "audio/webm";
-    const ext = contentType.includes("mp4")
-      ? "mp4"
-      : contentType.includes("wav")
+    // Map the browser/file MIME type to a file extension the transcriber knows.
+    const ct = contentType.toLowerCase();
+    const ext = ct.includes("m4a") || ct.includes("x-m4a")
+      ? "m4a"
+      : ct.includes("mp4")
+        ? "mp4"
+        : ct.includes("wav")
         ? "wav"
-        : contentType.includes("mpeg") || contentType.includes("mp3")
+        : ct.includes("mpeg") || ct.includes("mp3")
           ? "mp3"
-          : "webm";
+          : ct.includes("flac")
+            ? "flac"
+            : ct.includes("ogg")
+              ? "ogg"
+              : "webm";
 
     // Time-sortable id → newest-first listing via ScanIndexForward:false.
     const meetingId = `${Date.now()}-${randomUUID().slice(0, 8)}`;
