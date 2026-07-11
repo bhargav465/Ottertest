@@ -143,6 +143,12 @@ export async function getMeeting(meetingId: string): Promise<Meeting> {
   return data.meeting;
 }
 
+/** Short-lived presigned URL to play back / download the recording. */
+export async function getAudioUrl(meetingId: string): Promise<string> {
+  const data = await request<{ url: string }>(`/meetings/${meetingId}/audio`);
+  return data.url;
+}
+
 export function deleteMeeting(meetingId: string): Promise<void> {
   return request<void>(`/meetings/${meetingId}`, { method: "DELETE" });
 }

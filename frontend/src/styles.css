@@ -531,6 +531,33 @@ button {
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  flex: none;
+  justify-content: flex-end;
+}
+.audio-player {
+  width: 100%;
+  height: 40px;
+  margin-bottom: 1.2rem;
+}
+.search-input {
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  margin: 0.6rem 0 0.2rem;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 0.88rem;
+}
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .processing-banner {
   display: flex;
   align-items: center;

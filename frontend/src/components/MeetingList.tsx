@@ -43,6 +43,7 @@ export function MeetingList({
   const [meetings, setMeetings] = useState<MeetingListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -89,10 +90,20 @@ export function MeetingList({
   }, [folders, onFoldersChange]);
 
   const visible = useMemo(() => {
-    if (activeFolder === null) return meetings;
-    if (activeFolder === UNFILED) return meetings.filter((m) => !m.folder);
-    return meetings.filter((m) => m.folder === activeFolder);
-  }, [meetings, activeFolder]);
+    let list = meetings;
+    if (activeFolder === UNFILED) list = list.filter((m) => !m.folder);
+    else if (activeFolder !== null)
+      list = list.filter((m) => m.folder === activeFolder);
+    const q = query.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (m) =>
+          m.title.toLowerCase().includes(q) ||
+          (m.tldr ?? "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [meetings, activeFolder, query]);
 
   const showFolderTags = activeFolder === null;
 
@@ -104,6 +115,16 @@ export function MeetingList({
           ↻
         </button>
       </div>
+
+      {meetings.length > 3 && (
+        <input
+          className="search-input"
+          type="search"
+          placeholder="Search meetings…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      )}
 
       {(folders.length > 0 || hasUnfiled) && (
         <div className="folder-filter">
@@ -139,7 +160,9 @@ export function MeetingList({
         <div className="muted small">No meetings yet — record your first one.</div>
       )}
       {!loading && meetings.length > 0 && visible.length === 0 && (
-        <div className="muted small">No meetings in this folder yet.</div>
+        <div className="muted small">
+          {query.trim() ? "No meetings match your search." : "No meetings in this folder yet."}
+        </div>
       )}
 
       <ul>
