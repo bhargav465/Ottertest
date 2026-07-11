@@ -70,12 +70,15 @@ jobs:
 
       - name: Point Bubblewrap at the runner's JDK + Android SDK
         run: |
-          # The runner ships a fully-provisioned, licensed Android SDK. Use it
-          # (and the setup-java JDK) instead of letting Bubblewrap download its
-          # own, which fails to load SDK components under Gradle.
+          # The runner ships a fully-provisioned, licensed Android SDK — use it
+          # (and the setup-java JDK) instead of Bubblewrap's own download, which
+          # fails to load SDK components under Gradle. Bubblewrap validates the
+          # SDK by looking for a legacy `tools/` dir that modern SDKs dropped, so
+          # create a marker to satisfy the check.
           mkdir -p ~/.bubblewrap
           printf '{ "jdkPath": "%s", "androidSdkPath": "%s" }\n' "$JAVA_HOME" "$ANDROID_SDK_ROOT" > ~/.bubblewrap/config.json
           cat ~/.bubblewrap/config.json
+          mkdir -p "$ANDROID_SDK_ROOT/tools/bin"
           SDKMGR="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMGR" --licenses >/dev/null 2>&1 || true
           "$SDKMGR" "platform-tools" "platforms;android-33" "platforms;android-34" "platforms;android-35" "build-tools;34.0.0" "build-tools;35.0.0" >/dev/null 2>&1 || true
