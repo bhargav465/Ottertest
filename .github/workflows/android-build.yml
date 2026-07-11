@@ -68,15 +68,25 @@ jobs:
               -dname "CN=Ottertest, OU=Dev, O=Ottertest, L=NA, S=NA, C=US"
           fi
 
+      - name: Point Bubblewrap at the runner's JDK + Android SDK
+        run: |
+          # The runner ships a fully-provisioned, licensed Android SDK. Use it
+          # (and the setup-java JDK) instead of letting Bubblewrap download its
+          # own, which fails to load SDK components under Gradle.
+          mkdir -p ~/.bubblewrap
+          printf '{ "jdkPath": "%s", "androidSdkPath": "%s" }\n' "$JAVA_HOME" "$ANDROID_SDK_ROOT" > ~/.bubblewrap/config.json
+          cat ~/.bubblewrap/config.json
+          SDKMGR="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMGR" --licenses >/dev/null 2>&1 || true
+          "$SDKMGR" "platform-tools" "platforms;android-33" "platforms;android-34" "platforms;android-35" "build-tools;34.0.0" "build-tools;35.0.0" >/dev/null 2>&1 || true
+
       - name: Build .aab and .apk
         working-directory: android
         env:
           BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || 'ottertest' }}
           BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || 'ottertest' }}
         run: |
-          # Auto-accept Android SDK license/download prompts; build from the
-          # committed twa-manifest.json (generates the project on first run).
-          yes | bubblewrap build --skipPwaValidation
+          bubblewrap build --skipPwaValidation
           echo "--- artifacts ---"; ls -la *.aab *.apk 2>/dev/null || true
 
       - name: Upload Android artifacts
