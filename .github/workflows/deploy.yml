@@ -113,6 +113,15 @@ jobs:
             [ -f "../frontend/dist/$f" ] && aws s3 cp "../frontend/dist/$f" \
               "s3://$SITE_BUCKET/$f" --cache-control "no-cache" || true
           done
+          # Play Store TWA: Digital Asset Links must be fresh + application/json,
+          # and the privacy policy page should always revalidate.
+          if [ -f ../frontend/dist/.well-known/assetlinks.json ]; then
+            aws s3 cp ../frontend/dist/.well-known/assetlinks.json \
+              "s3://$SITE_BUCKET/.well-known/assetlinks.json" \
+              --content-type application/json --cache-control "no-cache"
+          fi
+          [ -f ../frontend/dist/privacy.html ] && aws s3 cp ../frontend/dist/privacy.html \
+            "s3://$SITE_BUCKET/privacy.html" --content-type text/html --cache-control "no-cache" || true
           echo "Invalidating CloudFront $DIST_ID ..."
           aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*" >/dev/null
           echo "SITE_URL=$(jq -r '.OttertestStack.SiteUrl' cdk-outputs.json)" >> "$GITHUB_ENV"

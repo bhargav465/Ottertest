@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f1115" />
+    <title>Ottertest — Privacy Policy</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        background: #0b0d12;
+        color: #e6e8ec;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.65;
+      }
+      main { max-width: 760px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+      h1 { font-size: 1.8rem; letter-spacing: -0.02em; }
+      h2 { font-size: 1.15rem; margin-top: 2rem; }
+      a { color: #6d8bff; }
+      code { background: #171a21; padding: 0.1rem 0.35rem; border-radius: 6px; }
+      .muted { color: #8b93a1; font-size: 0.9rem; }
+      ul { padding-left: 1.2rem; }
+      li { margin-bottom: 0.35rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Ottertest — Privacy Policy</h1>
+      <p class="muted">Last updated: 2026-07-11</p>
+
+      <p>
+        Ottertest is a meeting recorder that transcribes and summarizes audio you
+        record. This policy explains what data the app handles and how. Ottertest
+        is self-hosted: the operator who deployed this instance runs it inside
+        their own cloud account and is the data controller for your data.
+      </p>
+
+      <h2>Information we collect</h2>
+      <ul>
+        <li><strong>Account information</strong> — your email address and password, used to sign in (managed by Amazon Cognito).</li>
+        <li><strong>Audio recordings</strong> — audio you explicitly record or capture in the app, using your device microphone (and, only if you enable it, audio from a browser tab you choose to share).</li>
+        <li><strong>Derived content</strong> — transcripts, summaries, action items, folders, and speaker names generated from or added to your recordings.</li>
+        <li><strong>Basic technical data</strong> — standard request metadata (e.g. timestamps) needed to operate the service.</li>
+      </ul>
+
+      <h2>How we use it</h2>
+      <ul>
+        <li>To record, transcribe, summarize, and display your meetings back to you.</li>
+        <li>To let you organize, rename, search, and delete your own content.</li>
+      </ul>
+      <p>We do not sell your data, and we do not use it for advertising.</p>
+
+      <h2>Where your data is stored</h2>
+      <p>
+        Your recordings and metadata are stored in the operator's own Amazon Web
+        Services (AWS) account — audio in Amazon S3 (private, encrypted) and
+        metadata in Amazon DynamoDB. Access is restricted to your authenticated
+        account; users only ever see their own meetings.
+      </p>
+
+      <h2>Third-party processors</h2>
+      <p>To produce transcripts and summaries, audio and text are sent to:</p>
+      <ul>
+        <li><strong>Deepgram</strong> — receives your audio to produce the transcript. See <a href="https://deepgram.com/privacy" rel="noopener">Deepgram's privacy policy</a>.</li>
+        <li><strong>Groq</strong> — receives the transcript text to produce the summary and action items (only if AI summaries are enabled). See <a href="https://groq.com/privacy-policy/" rel="noopener">Groq's privacy policy</a>.</li>
+      </ul>
+      <p>These providers process the data to return a result to Ottertest; they are not permitted to use it for their own purposes under their terms.</p>
+
+      <h2>Microphone permission</h2>
+      <p>
+        The app requests microphone access only while you are recording, to
+        capture the audio you choose to record. Recording never starts without
+        your action.
+      </p>
+
+      <h2>Data retention &amp; deletion</h2>
+      <ul>
+        <li>You can delete any meeting at any time from the app; this removes its audio and metadata.</li>
+        <li>To delete your entire account and all associated data, contact the operator at the address below.</li>
+      </ul>
+
+      <h2>Children</h2>
+      <p>Ottertest is not directed to children under 13 and should not be used by them.</p>
+
+      <h2>Changes</h2>
+      <p>We may update this policy; the "last updated" date above reflects the latest revision.</p>
+
+      <h2>Contact</h2>
+      <p>
+        For privacy questions or data-deletion requests, contact the operator of
+        this instance at <code>CONTACT_EMAIL_PLACEHOLDER</code>.
+      </p>
+    </main>
+  </body>
+</html>

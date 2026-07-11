@@ -1,0 +1,43 @@
+{
+  "packageId": "com.ottertest.twa",
+  "host": "d1m9ye1xrz6czt.cloudfront.net",
+  "name": "Ottertest",
+  "launcherName": "Ottertest",
+  "display": "standalone",
+  "orientation": "portrait",
+  "themeColor": "#0f1115",
+  "themeColorDark": "#0f1115",
+  "navigationColor": "#0f1115",
+  "navigationColorDark": "#0f1115",
+  "navigationDividerColor": "#0f1115",
+  "navigationDividerColorDark": "#0f1115",
+  "backgroundColor": "#0f1115",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://d1m9ye1xrz6czt.cloudfront.net/pwa-512.png",
+  "maskableIconUrl": "https://d1m9ye1xrz6czt.cloudfront.net/pwa-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "ottertest"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://d1m9ye1xrz6czt.cloudfront.net/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://d1m9ye1xrz6czt.cloudfront.net/",
+  "minSdkVersion": 21,
+  "orientationLock": false,
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "appVersion": "1.0.0"
+}
