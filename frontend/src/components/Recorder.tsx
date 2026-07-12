@@ -42,6 +42,11 @@ function fmt(seconds: number): string {
 
 type State = "idle" | "recording" | "paused" | "uploading";
 
+// Guardrails: keep single recordings/imports within what the transcription
+// pipeline (Lambda memory/timeout) and your Deepgram bill comfortably handle.
+const MAX_RECORD_SECONDS = 3 * 60 * 60; // auto-stop after 3 hours
+const MAX_IMPORT_BYTES = 200 * 1024 * 1024; // 200 MB
+
 export function Recorder({
   onUploaded,
   folder,
@@ -76,14 +81,15 @@ export function Recorder({
   }, []);
 
   const startTimer = () => {
-    timerRef.current = window.setInterval(
-      () =>
-        setElapsed((e) => {
-          elapsedRef.current = e + 1;
-          return e + 1;
-        }),
-      1000
-    );
+    timerRef.current = window.setInterval(() => {
+      const next = elapsedRef.current + 1;
+      elapsedRef.current = next;
+      setElapsed(next);
+      if (next >= MAX_RECORD_SECONDS) {
+        setNote("Reached the 3-hour recording limit — saving your recording now.");
+        stop();
+      }
+    }, 1000);
   };
   const stopTimer = () => {
     if (timerRef.current) {
@@ -270,6 +276,12 @@ export function Recorder({
     setNote(null);
     if (!file.type.startsWith("audio/") && !/\.(mp3|m4a|wav|ogg|flac|webm|mp4)$/i.test(file.name)) {
       setError("Please choose an audio file (mp3, m4a, wav, ogg, flac…).");
+      return;
+    }
+    if (file.size > MAX_IMPORT_BYTES) {
+      setError(
+        `That file is ${Math.round(file.size / 1024 / 1024)} MB — the limit is 200 MB. Tip: convert it to mp3/m4a to shrink it.`
+      );
       return;
     }
     const contentType = file.type || "audio/mpeg";

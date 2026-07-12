@@ -33,6 +33,10 @@ export interface MeetingListItem {
   tldr?: string;
   actionItemCount: number;
   myActionItemCount: number;
+  /** Full action items (powers the cross-meeting tasks view). */
+  actionItems?: ActionItem[];
+  /** Indexes into actionItems that are checked off. */
+  actionItemsDone?: number[];
 }
 
 export interface Meeting extends MeetingListItem {
@@ -84,13 +88,14 @@ export function createUpload(input: {
   });
 }
 
-/** Update a meeting's folder, title, and/or speaker names. `folder: ""` unfiles. */
+/** Update a meeting's folder, title, speaker names, and/or done action items. */
 export async function updateMeeting(
   meetingId: string,
   input: {
     folder?: string;
     title?: string;
     speakerNames?: Record<string, string>;
+    actionItemsDone?: number[];
   }
 ): Promise<Meeting> {
   const data = await request<{ meeting: Meeting }>(`/meetings/${meetingId}`, {
@@ -98,6 +103,13 @@ export async function updateMeeting(
     body: JSON.stringify(input),
   });
   return data.meeting;
+}
+
+/** Re-run the transcription pipeline (e.g. after a transient failure). */
+export function retranscribeMeeting(meetingId: string): Promise<void> {
+  return request<void>(`/meetings/${meetingId}/retranscribe`, {
+    method: "POST",
+  });
 }
 
 /**

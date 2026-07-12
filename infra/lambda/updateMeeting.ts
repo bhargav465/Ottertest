@@ -20,6 +20,8 @@ interface UpdateBody {
   title?: string;
   /** Map of speaker label → custom name, e.g. { "Speaker 1": "Matt" }. */
   speakerNames?: Record<string, string> | null;
+  /** Indexes of completed action items ([] or null clears them all). */
+  actionItemsDone?: number[] | null;
 }
 
 const MAX_FOLDER = 60;
@@ -80,6 +82,21 @@ export async function handler(
         : {};
       // Empty map → remove the attribute entirely (back to plain Speaker N).
       fields.speakerNames = Object.keys(cleaned).length ? cleaned : null;
+    }
+
+    if (body.actionItemsDone !== undefined) {
+      const max = meeting.summary?.actionItems?.length ?? 0;
+      const cleaned = Array.isArray(body.actionItemsDone)
+        ? Array.from(
+            new Set(
+              body.actionItemsDone.filter(
+                (n) => Number.isInteger(n) && n >= 0 && n < max
+              )
+            )
+          ).sort((a, b) => a - b)
+        : [];
+      // Empty list → remove the attribute (nothing checked off).
+      fields.actionItemsDone = cleaned.length ? cleaned : null;
     }
 
     if (Object.keys(fields).length === 0) {

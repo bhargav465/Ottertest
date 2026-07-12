@@ -165,6 +165,7 @@ export class OttertestStack extends cdk.Stack {
     const deleteAccountFn = makeFn("DeleteAccountFn", "deleteAccount.ts", {
       timeout: cdk.Duration.minutes(2),
     });
+    const retranscribeFn = makeFn("RetranscribeFn", "retranscribe.ts");
 
     // -- Async pipeline handler --------------------------------------------
     // Single Groq-based Lambda: downloads the audio, transcribes it (Whisper),
@@ -185,6 +186,8 @@ export class OttertestStack extends cdk.Stack {
     mediaBucket.grantDelete(deleteMeetingFn);
     mediaBucket.grantRead(deleteAccountFn);
     mediaBucket.grantDelete(deleteAccountFn);
+    // Retry works by self-copying the audio object to re-fire the S3 event.
+    mediaBucket.grantReadWrite(retranscribeFn);
 
     meetingsTable.grantReadWriteData(createUploadUrlFn);
     meetingsTable.grantReadData(listMeetingsFn);
@@ -194,6 +197,7 @@ export class OttertestStack extends cdk.Stack {
     meetingsTable.grantReadWriteData(deleteMeetingFn);
     meetingsTable.grantReadData(exportAccountFn);
     meetingsTable.grantReadWriteData(deleteAccountFn);
+    meetingsTable.grantReadWriteData(retranscribeFn);
     meetingsTable.grantReadWriteData(transcribeFn);
 
     // Summaries run via Groq (external HTTPS) — no extra AWS permissions needed.
@@ -305,6 +309,11 @@ export class OttertestStack extends cdk.Stack {
       getAudioUrlFn
     );
     addRoute(apigw.HttpMethod.PATCH, "/meetings/{meetingId}", updateMeetingFn);
+    addRoute(
+      apigw.HttpMethod.POST,
+      "/meetings/{meetingId}/retranscribe",
+      retranscribeFn
+    );
     addRoute(apigw.HttpMethod.DELETE, "/meetings/{meetingId}", deleteMeetingFn);
     addRoute(apigw.HttpMethod.GET, "/account/export", exportAccountFn);
     addRoute(apigw.HttpMethod.DELETE, "/account", deleteAccountFn);

@@ -3,6 +3,7 @@ import {
   getMeeting,
   deleteMeeting,
   updateMeeting,
+  retranscribeMeeting,
   getAudioUrl,
   type Meeting,
 } from "../lib/api";
@@ -32,6 +33,9 @@ export function MeetingDetail({
   const [savingSpeakers, setSavingSpeakers] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -196,6 +200,50 @@ export function MeetingDetail({
     }
   };
 
+  const handleRetry = async () => {
+    setRetrying(true);
+    setError(null);
+    try {
+      await retranscribeMeeting(meetingId);
+      await load(); // status flips to TRANSCRIBING → polling resumes
+      onUpdated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Retry failed");
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  const saveTitle = async () => {
+    const next = titleDraft.trim();
+    setEditingTitle(false);
+    if (!next || next === meeting?.title) return;
+    try {
+      const updated = await updateMeeting(meetingId, { title: next });
+      setMeeting(updated);
+      onUpdated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Rename failed");
+    }
+  };
+
+  const toggleActionItem = async (idx: number) => {
+    if (!meeting) return;
+    const current = new Set(meeting.actionItemsDone ?? []);
+    if (current.has(idx)) current.delete(idx);
+    else current.add(idx);
+    const next = Array.from(current).sort((a, b) => a - b);
+    // Optimistic update so the checkbox feels instant.
+    setMeeting({ ...meeting, actionItemsDone: next });
+    try {
+      const updated = await updateMeeting(meetingId, { actionItemsDone: next });
+      setMeeting(updated);
+      onUpdated();
+    } catch {
+      load(); // roll back to server truth
+    }
+  };
+
   if (loading) return <div className="center muted">Loading meeting…</div>;
   if (error) return <div className="alert error">{error}</div>;
   if (!meeting) return null;
@@ -208,8 +256,35 @@ export function MeetingDetail({
   return (
     <div className="detail">
       <div className="detail-header">
-        <div>
-          <h1>{meeting.title}</h1>
+        <div className="detail-title">
+          {editingTitle ? (
+            <input
+              className="title-edit-input"
+              autoFocus
+              value={titleDraft}
+              maxLength={200}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveTitle();
+                if (e.key === "Escape") setEditingTitle(false);
+              }}
+            />
+          ) : (
+            <h1>
+              {meeting.title}{" "}
+              <button
+                className="btn link title-edit"
+                title="Rename meeting"
+                onClick={() => {
+                  setTitleDraft(meeting.title);
+                  setEditingTitle(true);
+                }}
+              >
+                ✏️
+              </button>
+            </h1>
+          )}
           <p className="muted small">
             {new Date(meeting.createdAt).toLocaleString()}
             {meeting.durationSeconds
@@ -315,8 +390,17 @@ export function MeetingDetail({
       )}
 
       {meeting.status === "FAILED" && (
-        <div className="alert error">
-          {meeting.error || "Something went wrong processing this meeting."}
+        <div className="alert error failed-row">
+          <span>
+            {meeting.error || "Something went wrong processing this meeting."}
+          </span>
+          <button
+            className="btn primary btn-sm"
+            disabled={retrying}
+            onClick={handleRetry}
+          >
+            {retrying ? "Retrying…" : "↻ Retry"}
+          </button>
         </div>
       )}
 
@@ -359,22 +443,33 @@ export function MeetingDetail({
                 <section>
                   <h3>Action items</h3>
                   <ul className="action-items">
-                    {[...meeting.summary.actionItems]
-                      .sort((a, b) => Number(b.mine) - Number(a.mine))
-                      .map((a, i) => (
-                        <li key={i} className={a.mine ? "mine" : ""}>
-                          <span className="check">
-                            {a.mine ? "⭐" : "▫️"}
-                          </span>
-                          <div>
-                            <div className="task">{a.task}</div>
-                            <div className="muted small">
-                              {a.mine ? "You" : a.owner}
-                              {a.due ? ` · due ${a.due}` : ""}
+                    {meeting.summary.actionItems
+                      .map((a, i) => ({ a, i })) // keep original index for done-tracking
+                      .sort((x, y) => Number(y.a.mine) - Number(x.a.mine))
+                      .map(({ a, i }) => {
+                        const done = (meeting.actionItemsDone ?? []).includes(i);
+                        return (
+                          <li
+                            key={i}
+                            className={`${a.mine ? "mine" : ""} ${done ? "done" : ""}`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="ai-check"
+                              checked={done}
+                              onChange={() => toggleActionItem(i)}
+                              title={done ? "Mark as open" : "Mark as done"}
+                            />
+                            <div>
+                              <div className="task">{a.task}</div>
+                              <div className="muted small">
+                                {a.mine ? "⭐ You" : a.owner}
+                                {a.due ? ` · due ${a.due}` : ""}
+                              </div>
                             </div>
-                          </div>
-                        </li>
-                      ))}
+                          </li>
+                        );
+                      })}
                   </ul>
                 </section>
               )}
