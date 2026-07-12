@@ -39,6 +39,8 @@ export interface Meeting {
   folder?: string;
   /** Custom display names for diarized speakers, keyed by label ("Speaker 1"). */
   speakerNames?: Record<string, string>;
+  /** Indexes (into summary.actionItems) the owner has checked off as done. */
+  actionItemsDone?: number[];
   status: MeetingStatus;
   createdAt: string;
   updatedAt: string;

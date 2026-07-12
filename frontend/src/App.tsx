@@ -4,12 +4,14 @@ import { AuthPanel } from "./components/AuthPanel";
 import { Recorder } from "./components/Recorder";
 import { MeetingList } from "./components/MeetingList";
 import { MeetingDetail } from "./components/MeetingDetail";
+import { TasksView } from "./components/TasksView";
 import { AccountMenu } from "./components/AccountMenu";
 
 export function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showTasks, setShowTasks] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [folders, setFolders] = useState<string[]>([]);
@@ -23,10 +25,16 @@ export function App() {
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
+  const openMeeting = useCallback((id: string) => {
+    setShowTasks(false);
+    setSelectedId(id);
+  }, []);
+
   const handleSignOut = () => {
     signOut();
     setUser(null);
     setSelectedId(null);
+    setShowTasks(false);
   };
 
   if (loading) {
@@ -37,6 +45,9 @@ export function App() {
     return <AuthPanel onAuthenticated={(u) => setUser(u)} />;
   }
 
+  // On mobile the content pane takes over the screen whenever something is open.
+  const contentOpen = selectedId !== null || showTasks;
+
   return (
     <div className="app">
       <header className="topbar">
@@ -45,11 +56,20 @@ export function App() {
           <span>Ottertest</span>
         </div>
         <div className="user-menu">
+          <button
+            className={`btn ghost btn-sm ${showTasks ? "active-nav" : ""}`}
+            onClick={() => {
+              setSelectedId(null);
+              setShowTasks((t) => !t);
+            }}
+          >
+            ✅ Tasks
+          </button>
           <AccountMenu user={user} onSignOut={handleSignOut} />
         </div>
       </header>
 
-      <main className={`layout ${selectedId ? "has-selection" : ""}`}>
+      <main className={`layout ${contentOpen ? "has-selection" : ""}`}>
         <aside className="sidebar">
           <Recorder
             folder={activeFolder}
@@ -60,7 +80,7 @@ export function App() {
           <MeetingList
             refreshKey={refreshKey}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={openMeeting}
             activeFolder={activeFolder}
             onFolderChange={setActiveFolder}
             onFoldersChange={setFolders}
@@ -68,7 +88,17 @@ export function App() {
         </aside>
 
         <section className="content">
-          {selectedId ? (
+          {showTasks ? (
+            <>
+              <button
+                className="btn ghost mobile-back"
+                onClick={() => setShowTasks(false)}
+              >
+                ← All meetings
+              </button>
+              <TasksView refreshKey={refreshKey} onOpenMeeting={openMeeting} />
+            </>
+          ) : selectedId ? (
             <>
               <button
                 className="btn ghost mobile-back"

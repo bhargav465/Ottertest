@@ -29,6 +29,9 @@ export async function handler(
       actionItemCount: m.summary?.actionItems?.length ?? 0,
       myActionItemCount:
         m.summary?.actionItems?.filter((a) => a.mine).length ?? 0,
+      // Full action items power the cross-meeting "My action items" view.
+      actionItems: m.summary?.actionItems ?? [],
+      actionItemsDone: m.actionItemsDone ?? [],
     }));
 
     return ok({ meetings: items });
