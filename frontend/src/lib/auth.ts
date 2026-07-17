@@ -118,9 +118,11 @@ export function startEmailCodeSignIn(
     () =>
       new Promise((resolve, reject) => {
         const user = new CognitoUser({ Username: email, Pool: pool });
-        user.setAuthenticationFlowType("CUSTOM_AUTH");
         const details = new AuthenticationDetails({ Username: email });
-        user.authenticateUser(details, {
+        // `initiateAuth` runs a pure CUSTOM_AUTH flow. (`authenticateUser` would
+        // force the SRP handshake, whose Buffer/WordArray crypto throws here and
+        // which mishandles the CUSTOM_CHALLENGE response.)
+        user.initiateAuth(details, {
           // The custom challenge is presented → the code has been emailed.
           customChallenge: () => resolve({ user }),
           onSuccess: () => resolve({ user }),
