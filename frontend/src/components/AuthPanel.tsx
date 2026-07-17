@@ -48,7 +48,7 @@ export function AuthPanel({
   const handleSignUp = () =>
     run(async () => {
       await signUp(email, password, fullName);
-      setInfo("We emailed you a verification code.");
+      setInfo(`We emailed a 6-digit code to ${email}.`);
       setMode("confirm");
     });
 
@@ -59,10 +59,22 @@ export function AuthPanel({
       const user = await getCurrentUser();
       if (user) onAuthenticated(user);
       else {
-        setInfo("Account confirmed. Please sign in.");
+        setInfo("Account confirmed — please sign in.");
         setMode("signin");
       }
     });
+
+  const heading =
+    mode === "signin"
+      ? "Sign in"
+      : mode === "signup"
+        ? "Create your account"
+        : "Check your email";
+
+  const subheading =
+    mode === "confirm"
+      ? `Enter the 6-digit code we sent to ${email || "your email"}.`
+      : "Record, transcribe and summarize your meetings — privately, in your own account.";
 
   return (
     <div className="auth-screen">
@@ -71,10 +83,9 @@ export function AuthPanel({
           <span className="logo">🦦</span>
           <span>Ottertest</span>
         </div>
-        <p className="muted tagline">
-          Record, transcribe and summarize your meetings — in your own AWS
-          account.
-        </p>
+
+        <h1 className="auth-heading">{heading}</h1>
+        <p className="muted auth-sub">{subheading}</p>
 
         {error && <div className="alert error">{error}</div>}
         {info && <div className="alert info">{info}</div>}
@@ -82,37 +93,50 @@ export function AuthPanel({
         {mode === "confirm" ? (
           <>
             <label className="field">
-              <span>Verification code</span>
+              <span>6-digit code</span>
               <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 placeholder="123456"
                 autoFocus
+                onKeyDown={(e) => e.key === "Enter" && code && handleConfirm()}
               />
             </label>
             <button
-              className="btn primary block"
-              disabled={busy}
+              className="btn primary block lg"
+              disabled={busy || !code}
               onClick={handleConfirm}
             >
-              {busy ? "Confirming…" : "Confirm & sign in"}
+              {busy ? "Verifying…" : "Verify & continue"}
             </button>
-            <button
-              className="btn link"
-              onClick={() => run(() => resendCode(email).then(() => setInfo("Code resent.")))}
-            >
-              Resend code
-            </button>
+            <div className="auth-links">
+              <button
+                className="btn link"
+                onClick={() =>
+                  run(() =>
+                    resendCode(email).then(() => setInfo("New code sent."))
+                  )
+                }
+              >
+                Resend code
+              </button>
+              <button className="btn link" onClick={() => setMode("signin")}>
+                Back to sign in
+              </button>
+            </div>
           </>
         ) : (
           <>
             {mode === "signup" && (
               <label className="field">
-                <span>Full name</span>
+                <span>Your name</span>
                 <input
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Ada Lovelace"
+                  autoComplete="name"
                 />
               </label>
             )}
@@ -123,6 +147,7 @@ export function AuthPanel({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
+                autoComplete="email"
                 autoFocus
               />
             </label>
@@ -132,7 +157,10 @@ export function AuthPanel({
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder={mode === "signup" ? "At least 8 characters" : "••••••••"}
+                autoComplete={
+                  mode === "signin" ? "current-password" : "new-password"
+                }
                 onKeyDown={(e) =>
                   e.key === "Enter" &&
                   (mode === "signin" ? handleSignIn() : handleSignUp())
@@ -141,8 +169,8 @@ export function AuthPanel({
             </label>
 
             <button
-              className="btn primary block"
-              disabled={busy}
+              className="btn primary block lg"
+              disabled={busy || !email || !password}
               onClick={mode === "signin" ? handleSignIn : handleSignUp}
             >
               {busy
@@ -151,29 +179,28 @@ export function AuthPanel({
                   ? "Sign in"
                   : "Create account"}
             </button>
+
+            <p className="switch muted">
+              {mode === "signin" ? (
+                <>
+                  New to Ottertest?{" "}
+                  <button className="btn link" onClick={() => setMode("signup")}>
+                    Create an account
+                  </button>
+                </>
+              ) : (
+                <>
+                  Already have an account?{" "}
+                  <button className="btn link" onClick={() => setMode("signin")}>
+                    Sign in
+                  </button>
+                </>
+              )}
+            </p>
           </>
         )}
 
-        {mode !== "confirm" && (
-          <p className="switch muted">
-            {mode === "signin" ? (
-              <>
-                No account?{" "}
-                <button className="btn link" onClick={() => setMode("signup")}>
-                  Sign up
-                </button>
-              </>
-            ) : (
-              <>
-                Already have one?{" "}
-                <button className="btn link" onClick={() => setMode("signin")}>
-                  Sign in
-                </button>
-              </>
-            )}
-          </p>
-        )}
-        <p className="switch muted small">
+        <p className="auth-legal muted small">
           <a className="privacy-link" href="/privacy.html" target="_blank" rel="noopener">
             Privacy Policy
           </a>
