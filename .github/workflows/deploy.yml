@@ -49,6 +49,26 @@ jobs:
         working-directory: infra
         run: npx cdk bootstrap
 
+      # Passwordless sign-in emails the code via SES from SES_FROM_EMAIL. Create
+      # the identity if needed (idempotent) so AWS sends the verification email;
+      # verification itself is a one-time click in that email's link.
+      - name: Ensure SES sender identity
+        env:
+          SES_FROM_EMAIL: ${{ secrets.SES_FROM_EMAIL || 'bhargav.tinku@gmail.com' }}
+          AWS_REGION: ${{ inputs.aws_region }}
+        run: |
+          echo "Ensuring SES email identity: $SES_FROM_EMAIL"
+          aws sesv2 create-email-identity --email-identity "$SES_FROM_EMAIL" \
+            --region "$AWS_REGION" 2>/dev/null \
+            && echo "Created identity (verification email sent)." \
+            || echo "Identity already exists (or creation skipped)."
+          STATUS=$(aws sesv2 get-email-identity --email-identity "$SES_FROM_EMAIL" \
+            --region "$AWS_REGION" --query VerifiedForSendingStatus --output text 2>/dev/null || echo unknown)
+          echo "Verified-for-sending: $STATUS"
+          if [ "$STATUS" != "True" ]; then
+            echo "::warning::SES sender $SES_FROM_EMAIL is not verified yet. Open the 'Amazon Web Services – Email Address Verification' email in that inbox and click the link, then re-run this deploy."
+          fi
+
       - name: Deploy stack
         working-directory: infra
         env:
@@ -56,9 +76,10 @@ jobs:
           # a repo secret. GROQ_API_KEY is optional (transcription-only if unset).
           DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          # Verified SES sender for passwordless email-code sign-in (optional;
-          # password login works without it). See docs/EMAIL_LOGIN.md.
-          SES_FROM_EMAIL: ${{ secrets.SES_FROM_EMAIL }}
+          # Verified SES sender for passwordless email-code sign-in. Falls back to
+          # the owner's address when the SES_FROM_EMAIL secret isn't set. Password
+          # login works regardless. See docs/EMAIL_LOGIN.md.
+          SES_FROM_EMAIL: ${{ secrets.SES_FROM_EMAIL || 'bhargav.tinku@gmail.com' }}
         run: npx cdk deploy --require-approval never --outputs-file cdk-outputs.json
 
       - name: Publish outputs to job summary
