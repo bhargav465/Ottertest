@@ -4,6 +4,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import * as iam from "aws-cdk-lib/aws-iam";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as apigw from "aws-cdk-lib/aws-apigatewayv2";
 import * as apigwAuth from "aws-cdk-lib/aws-apigatewayv2-authorizers";
@@ -90,7 +91,8 @@ export class OttertestStack extends cdk.Stack {
     });
 
     const userPoolClient = userPool.addClient("WebClient", {
-      authFlows: { userSrp: true, userPassword: true },
+      // `custom` enables the passwordless email-code (CUSTOM_AUTH) flow.
+      authFlows: { userSrp: true, userPassword: true, custom: true },
       preventUserExistenceErrors: true,
       accessTokenValidity: cdk.Duration.hours(8),
       idTokenValidity: cdk.Duration.hours(8),
@@ -134,6 +136,7 @@ export class OttertestStack extends cdk.Stack {
           "@aws-sdk/s3-request-presigner",
           "@aws-sdk/client-dynamodb",
           "@aws-sdk/lib-dynamodb",
+          "@aws-sdk/client-sesv2",
         ],
         minify: true,
         sourceMap: true,
@@ -166,6 +169,43 @@ export class OttertestStack extends cdk.Stack {
       timeout: cdk.Duration.minutes(2),
     });
     const retranscribeFn = makeFn("RetranscribeFn", "retranscribe.ts");
+
+    // -- Passwordless email-code (CUSTOM_AUTH) triggers --------------------
+    const defineAuthFn = makeFn(
+      "DefineAuthChallengeFn",
+      "auth/defineAuthChallenge.ts"
+    );
+    const createAuthFn = makeFn(
+      "CreateAuthChallengeFn",
+      "auth/createAuthChallenge.ts",
+      { environment: { SES_FROM_EMAIL: process.env.SES_FROM_EMAIL ?? "" } }
+    );
+    const verifyAuthFn = makeFn(
+      "VerifyAuthChallengeFn",
+      "auth/verifyAuthChallenge.ts"
+    );
+    // Auto-confirms passwordless sign-ups so first-time users can use a code.
+    const preSignUpFn = makeFn("PreSignUpFn", "auth/preSignUp.ts");
+    // Send the sign-in code via SES.
+    createAuthFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ses:SendEmail"],
+        resources: ["*"],
+      })
+    );
+    userPool.addTrigger(
+      cognito.UserPoolOperation.DEFINE_AUTH_CHALLENGE,
+      defineAuthFn
+    );
+    userPool.addTrigger(
+      cognito.UserPoolOperation.CREATE_AUTH_CHALLENGE,
+      createAuthFn
+    );
+    userPool.addTrigger(
+      cognito.UserPoolOperation.VERIFY_AUTH_CHALLENGE_RESPONSE,
+      verifyAuthFn
+    );
+    userPool.addTrigger(cognito.UserPoolOperation.PRE_SIGN_UP, preSignUpFn);
 
     // -- Async pipeline handler --------------------------------------------
     // Single Groq-based Lambda: downloads the audio, transcribes it (Whisper),

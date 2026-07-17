@@ -56,6 +56,9 @@ jobs:
           # a repo secret. GROQ_API_KEY is optional (transcription-only if unset).
           DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          # Verified SES sender for passwordless email-code sign-in (optional;
+          # password login works without it). See docs/EMAIL_LOGIN.md.
+          SES_FROM_EMAIL: ${{ secrets.SES_FROM_EMAIL }}
         run: npx cdk deploy --require-approval never --outputs-file cdk-outputs.json
 
       - name: Publish outputs to job summary

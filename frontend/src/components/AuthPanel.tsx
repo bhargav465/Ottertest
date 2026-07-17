@@ -5,10 +5,13 @@ import {
   confirmSignUp,
   resendCode,
   getCurrentUser,
+  startEmailCodeSignIn,
+  answerEmailCode,
   type AuthUser,
+  type EmailCodeChallenge,
 } from "../lib/auth";
 
-type Mode = "signin" | "signup" | "confirm";
+type Mode = "signin" | "signup" | "confirm" | "emailcode" | "emailverify";
 
 export function AuthPanel({
   onAuthenticated,
@@ -20,6 +23,7 @@ export function AuthPanel({
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [code, setCode] = useState("");
+  const [challenge, setChallenge] = useState<EmailCodeChallenge | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,17 +68,39 @@ export function AuthPanel({
       }
     });
 
+  const handleEmailCodeStart = () =>
+    run(async () => {
+      const ch = await startEmailCodeSignIn(email);
+      setChallenge(ch);
+      setCode("");
+      setInfo(`We emailed a 6-digit sign-in code to ${email}.`);
+      setMode("emailverify");
+    });
+
+  const handleEmailCodeVerify = () =>
+    run(async () => {
+      if (!challenge) throw new Error("Start over and request a new code.");
+      await answerEmailCode(challenge, code);
+      const user = await getCurrentUser();
+      if (user) onAuthenticated(user);
+      else throw new Error("That code didn't work — request a new one.");
+    });
+
   const heading =
     mode === "signin"
       ? "Sign in"
       : mode === "signup"
         ? "Create your account"
-        : "Check your email";
+        : mode === "emailcode"
+          ? "Sign in with a code"
+          : "Check your email";
 
   const subheading =
-    mode === "confirm"
+    mode === "confirm" || mode === "emailverify"
       ? `Enter the 6-digit code we sent to ${email || "your email"}.`
-      : "Record, transcribe and summarize your meetings — privately, in your own account.";
+      : mode === "emailcode"
+        ? "No password needed — we'll email you a one-time code to sign in."
+        : "Record, transcribe and summarize your meetings — privately, in your own account.";
 
   return (
     <div className="auth-screen">
@@ -90,7 +116,7 @@ export function AuthPanel({
         {error && <div className="alert error">{error}</div>}
         {info && <div className="alert info">{info}</div>}
 
-        {mode === "confirm" ? (
+        {mode === "confirm" || mode === "emailverify" ? (
           <>
             <label className="field">
               <span>6-digit code</span>
@@ -101,13 +127,21 @@ export function AuthPanel({
                 onChange={(e) => setCode(e.target.value)}
                 placeholder="123456"
                 autoFocus
-                onKeyDown={(e) => e.key === "Enter" && code && handleConfirm()}
+                onKeyDown={(e) =>
+                  e.key === "Enter" &&
+                  code &&
+                  (mode === "emailverify"
+                    ? handleEmailCodeVerify()
+                    : handleConfirm())
+                }
               />
             </label>
             <button
               className="btn primary block lg"
               disabled={busy || !code}
-              onClick={handleConfirm}
+              onClick={
+                mode === "emailverify" ? handleEmailCodeVerify : handleConfirm
+              }
             >
               {busy ? "Verifying…" : "Verify & continue"}
             </button>
@@ -116,16 +150,54 @@ export function AuthPanel({
                 className="btn link"
                 onClick={() =>
                   run(() =>
-                    resendCode(email).then(() => setInfo("New code sent."))
+                    mode === "emailverify"
+                      ? handleEmailCodeStart()
+                      : resendCode(email).then(() => setInfo("New code sent."))
                   )
                 }
               >
                 Resend code
               </button>
-              <button className="btn link" onClick={() => setMode("signin")}>
+              <button
+                className="btn link"
+                onClick={() => {
+                  setChallenge(null);
+                  setMode("signin");
+                }}
+              >
                 Back to sign in
               </button>
             </div>
+          </>
+        ) : mode === "emailcode" ? (
+          <>
+            <label className="field">
+              <span>Email</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                autoFocus
+                onKeyDown={(e) =>
+                  e.key === "Enter" && email && handleEmailCodeStart()
+                }
+              />
+            </label>
+            <button
+              className="btn primary block lg"
+              disabled={busy || !email}
+              onClick={handleEmailCodeStart}
+            >
+              {busy ? "Sending…" : "Email me a code"}
+            </button>
+            <p className="switch muted">
+              Prefer a password?{" "}
+              <button className="btn link" onClick={() => setMode("signin")}>
+                Sign in with password
+              </button>
+            </p>
           </>
         ) : (
           <>
@@ -179,6 +251,25 @@ export function AuthPanel({
                   ? "Sign in"
                   : "Create account"}
             </button>
+
+            {mode === "signin" && (
+              <>
+                <div className="auth-divider">
+                  <span>or</span>
+                </div>
+                <button
+                  className="btn block"
+                  disabled={busy}
+                  onClick={() => {
+                    setError(null);
+                    setInfo(null);
+                    setMode("emailcode");
+                  }}
+                >
+                  Email me a one-time code
+                </button>
+              </>
+            )}
 
             <p className="switch muted">
               {mode === "signin" ? (
