@@ -1,0 +1,48 @@
+name: Health probe
+
+on:
+  push:
+    branches: [diag/health]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: ottertest-health
+
+      - name: Probe API + site
+        run: |
+          API=$(aws cloudformation describe-stacks --stack-name OttertestStack \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
+          SITE=$(aws cloudformation describe-stacks --stack-name OttertestStack \
+            --query "Stacks[0].Outputs[?OutputKey=='SiteUrl'].OutputValue" --output text)
+          echo "API=$API"
+          echo "SITE=$SITE"
+
+          echo "===== 1. API auth (GET /meetings, no token → expect 401) ====="
+          curl -s -o /dev/null -w 'HTTP %{http_code}\n' "$API/meetings"
+
+          echo "===== 2. CORS preflight (OPTIONS /meetings, Origin=SITE) ====="
+          curl -s -i -X OPTIONS "$API/meetings" \
+            -H "Origin: $SITE" \
+            -H "Access-Control-Request-Method: GET" \
+            -H "Access-Control-Request-Headers: authorization,content-type" \
+            | grep -i -E "HTTP/|access-control-allow" || echo "(no CORS headers returned!)"
+
+          echo "===== 3. Live site index.html ====="
+          curl -s -o /dev/null -w 'HTTP %{http_code}\n' "$SITE/"
+
+          echo "===== 4. Which API URL is baked into the deployed JS ====="
+          JS=$(curl -s "$SITE/" | grep -o '/assets/index-[^"]*\.js' | head -1)
+          echo "bundle: $JS"
+          curl -s "$SITE$JS" | grep -o 'https://[a-z0-9]*\.execute-api\.[a-z0-9-]*\.amazonaws\.com' | head -1 \
+            | sed 's/^/frontend calls API: /' || echo "(could not find API URL in bundle)"
