@@ -318,12 +318,7 @@ export function Recorder({
           />
           <span>
             Capture call audio
-            <span className="muted small">
-              {" "}
-              — only for live video calls. Records a browser tab you pick, so
-              anything playing in it (a video, music) gets recorded instead of
-              your voice.
-            </span>
+            <span className="muted small"> — for live video calls</span>
           </span>
         </label>
       )}
