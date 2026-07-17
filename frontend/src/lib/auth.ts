@@ -69,6 +69,83 @@ export function signOut(): void {
   pool.getCurrentUser()?.signOut();
 }
 
+/**
+ * A code-based (passwordless) sign-in in progress. Hold onto the returned
+ * `user` and pass it, plus the emailed code, to `answerEmailCode`.
+ */
+export interface EmailCodeChallenge {
+  user: CognitoUser;
+}
+
+/** Generates a random password that satisfies the Cognito password policy. */
+function randomPassword(): string {
+  const bytes = new Uint32Array(6);
+  crypto.getRandomValues(bytes);
+  const body = Array.from(bytes, (n) => n.toString(36)).join("");
+  // Guarantee an uppercase letter, a digit, and a symbol.
+  return `Aa1!${body}`;
+}
+
+/**
+ * Ensures an account exists for `email` so the passwordless code flow can run.
+ * New accounts are created with a throwaway password and a `passwordless` flag
+ * that the PreSignUp trigger uses to auto-confirm them (no separate email
+ * verification step). An already-registered email is left untouched.
+ */
+function ensureAccount(email: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const attrs = [new CognitoUserAttribute({ Name: "email", Value: email })];
+    // validationData reaches the PreSignUp Lambda, which auto-confirms the user.
+    const validation = [
+      new CognitoUserAttribute({ Name: "passwordless", Value: "true" }),
+    ];
+    pool.signUp(email, randomPassword(), attrs, validation, (err) => {
+      if (!err || err.name === "UsernameExistsException") resolve();
+      else reject(err);
+    });
+  });
+}
+
+/**
+ * Begins the passwordless email-code (CUSTOM_AUTH) flow: makes sure the account
+ * exists, then has Cognito email a 6-digit code and resolves once the challenge
+ * is presented. Finish with `answerEmailCode`.
+ */
+export function startEmailCodeSignIn(
+  email: string
+): Promise<EmailCodeChallenge> {
+  return ensureAccount(email).then(
+    () =>
+      new Promise((resolve, reject) => {
+        const user = new CognitoUser({ Username: email, Pool: pool });
+        user.setAuthenticationFlowType("CUSTOM_AUTH");
+        const details = new AuthenticationDetails({ Username: email });
+        user.authenticateUser(details, {
+          // The custom challenge is presented → the code has been emailed.
+          customChallenge: () => resolve({ user }),
+          onSuccess: () => resolve({ user }),
+          onFailure: (err) => reject(err),
+        });
+      })
+  );
+}
+
+/**
+ * Answers a passwordless email-code challenge. Resolves with the session on the
+ * correct code; rejects (and the caller can retry) on a wrong one.
+ */
+export function answerEmailCode(
+  challenge: EmailCodeChallenge,
+  code: string
+): Promise<CognitoUserSession> {
+  return new Promise((resolve, reject) => {
+    challenge.user.sendCustomChallengeAnswer(code.trim(), {
+      onSuccess: (session) => resolve(session),
+      onFailure: (err) => reject(err),
+    });
+  });
+}
+
 /** Permanently delete the currently signed-in Cognito account. */
 export function deleteCurrentUser(): Promise<void> {
   const user = pool.getCurrentUser();

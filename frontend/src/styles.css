@@ -880,6 +880,21 @@ button {
   padding-top: 1.1rem;
   border-top: 1px solid var(--border);
 }
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
 .tagline {
   text-align: center;
   margin: 0.6rem 0 1.6rem;
