@@ -1,0 +1,49 @@
+name: Diagnose passwordless auth
+
+# One-off diagnostic: inspect the CreateAuthChallenge Lambda's env + recent logs
+# to see why sign-in codes aren't being emailed.
+on:
+  workflow_dispatch:
+    inputs:
+      aws_region:
+        description: AWS region
+        required: true
+        default: us-east-1
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: ottertest-diag
+
+      - name: Inspect CreateAuthChallenge Lambda + logs
+        env:
+          AWS_REGION: ${{ inputs.aws_region }}
+        run: |
+          set +e
+          FN=$(aws lambda list-functions --region "$AWS_REGION" \
+            --query "Functions[?contains(FunctionName,'CreateAuthChallenge')].FunctionName | [0]" \
+            --output text)
+          echo "== CreateAuthChallenge function: $FN =="
+          echo "== Environment variables =="
+          aws lambda get-function-configuration --region "$AWS_REGION" \
+            --function-name "$FN" --query 'Environment.Variables' --output json
+          echo "== Recent logs (last 30m) =="
+          aws logs tail "/aws/lambda/$FN" --region "$AWS_REGION" --since 30m --format short 2>&1 | tail -60
+
+          echo ""
+          echo "== SES sender verification status =="
+          aws sesv2 get-email-identity --region "$AWS_REGION" \
+            --email-identity bhargav.tinku@gmail.com \
+            --query '{Status:VerifiedForSendingStatus,Type:IdentityType}' --output json 2>&1
+          echo "== SES account sending status =="
+          aws sesv2 get-account --region "$AWS_REGION" \
+            --query '{ProductionAccess:ProductionAccessEnabled,SendingEnabled:SendingEnabled}' --output json 2>&1
